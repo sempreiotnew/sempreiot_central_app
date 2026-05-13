@@ -1,25 +1,31 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sempreiot_central_app/presentation/widgets/iot_network_animation.dart';
+
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../features/auth/application/auth_provider.dart';
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends ConsumerWidget {
   const LoginScreen({super.key});
 
-  void _showError(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red.shade700,
-        duration: const Duration(seconds: 6),
-      ),
-    );
-  }
-
   @override
-  Widget build(BuildContext context) {
-    
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authNotifierProvider);
+    final isLoading = authState.isLoading;
+
+    ref.listen(authNotifierProvider, (_, next) {
+      if (next.hasError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next.error.toString()),
+            backgroundColor: Colors.red.shade700,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
+    });
 
     return Scaffold(
       backgroundColor: AppColors.backgroundDark,
@@ -33,7 +39,7 @@ class LoginScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Spacer(flex: 2),
-                  _Logo(),
+                  const _Logo(),
                   const SizedBox(height: 16),
                   const SizedBox(height: 8),
                   const Spacer(flex: 2),
@@ -44,8 +50,12 @@ class LoginScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   _SocialButton(
-                    onTap: () => {},
-                    icon: _GoogleIcon(),
+                    onTap: isLoading
+                        ? null
+                        : () => ref
+                            .read(authNotifierProvider.notifier)
+                            .signInWithGoogle(),
+                    icon: const _GoogleIcon(),
                     label: 'Continuar com Google',
                     backgroundColor: AppColors.white,
                     foregroundColor: AppColors.textPrimaryLight,
@@ -54,20 +64,24 @@ class LoginScreen extends StatelessWidget {
                       defaultTargetPlatform != TargetPlatform.android) ...[
                     const SizedBox(height: 16),
                     _SocialButton(
-                      onTap: () =>{},
+                      onTap: isLoading
+                          ? null
+                          : () => ref
+                              .read(authNotifierProvider.notifier)
+                              .signInWithApple(),
                       icon: const Icon(
-                              Icons.apple,
-                              color: AppColors.white,
-                              size: 28,
-                            ),
-                      label: "Continuar com Apple",
+                        Icons.apple,
+                        color: AppColors.white,
+                        size: 28,
+                      ),
+                      label: 'Continuar com Apple',
                       backgroundColor: AppColors.black,
                       foregroundColor: AppColors.white,
                       border: Border.all(color: AppColors.divider),
                     ),
                   ],
                   const Spacer(flex: 1),
-                  _Divider(),
+                  const _Divider(),
                   const SizedBox(height: 24),
                   _RegisterButton(onTap: () {}),
                   const SizedBox(height: 32),
@@ -75,6 +89,13 @@ class LoginScreen extends StatelessWidget {
               ),
             ),
           ),
+          if (isLoading)
+            const Positioned.fill(
+              child: ColoredBox(
+                color: Colors.black45,
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            ),
         ],
       ),
     );
@@ -82,6 +103,8 @@ class LoginScreen extends StatelessWidget {
 }
 
 class _GoogleIcon extends StatelessWidget {
+  const _GoogleIcon();
+
   @override
   Widget build(BuildContext context) {
     return Image.asset(
@@ -94,6 +117,8 @@ class _GoogleIcon extends StatelessWidget {
 }
 
 class _Logo extends StatelessWidget {
+  const _Logo();
+
   @override
   Widget build(BuildContext context) {
     return Image.asset(
@@ -158,9 +183,9 @@ class _SocialButton extends StatelessWidget {
   }
 }
 
-
-
 class _Divider extends StatelessWidget {
+  const _Divider();
+
   @override
   Widget build(BuildContext context) {
     return const Row(
@@ -201,4 +226,3 @@ class _RegisterButton extends StatelessWidget {
     );
   }
 }
-

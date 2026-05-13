@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class MainScreen extends StatefulWidget {
+import '../../../features/auth/application/auth_provider.dart';
+
+class MainScreen extends ConsumerWidget {
   const MainScreen({super.key});
 
   @override
-  State<MainScreen> createState() => _MainScreenState();
-}
-
-class _MainScreenState extends State<MainScreen> {
-  @override
-  Widget build(BuildContext context) {
-    return const Text("OLAR");
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      body: Center(
+        child: ElevatedButton(
+          onPressed: () => ref.read(authNotifierProvider.notifier).signOut(),
+          child: const Text('Logout'),
+        ),
+      ),
+    );
   }
 }
