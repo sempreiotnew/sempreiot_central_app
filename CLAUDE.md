@@ -6,6 +6,15 @@ The goal is to ensure clean architecture, scalability, and maintainability while
 
 ---
 
+# Default Behavior
+- Always apply the "ui_ux_flutter" skill when:
+- Creating new UI screens
+- Designing features
+- Improving UX
+- Writing Flutter UI code
+# Skill: ui_ux_flutter
+@include .claude/skills/ui_ux_flutter.md
+
 # 🚨 Domain Context (To Be Defined)
 
 This project will be a Fire Alarm Central System.
@@ -19,6 +28,8 @@ Detailed rules for:
 will be defined later as the system architecture evolves.
 
 ---
+
+
 
 # 🧠 General Principles
 
