@@ -123,7 +123,8 @@ class _NetworkPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final positions = nodes.map((n) => n.position(size, driftProgress)).toList();
+    final positions =
+        nodes.map((n) => n.position(size, driftProgress)).toList();
 
     _drawConnections(canvas, size, positions);
     _drawNodes(canvas, positions);
@@ -153,7 +154,8 @@ class _NetworkPainter extends CustomPainter {
     }
   }
 
-  void _drawPacket(Canvas canvas, Offset a, Offset b, int i, int j, double strength) {
+  void _drawPacket(
+      Canvas canvas, Offset a, Offset b, int i, int j, double strength) {
     final offset = ((i * 7 + j * 13) % 100) / 100.0;
     final t = (packetProgress + offset) % 1.0;
     final pos = Offset.lerp(a, b, t)!;

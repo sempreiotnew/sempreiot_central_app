@@ -5,4 +5,14 @@ abstract interface class IAuthRepository {
   Future<void> signInWithGoogle();
   Future<void> signInWithApple();
   Future<void> signOut();
+  Future<void> signInWithEmailPassword({
+    required String email,
+    required String password,
+  });
+
+  Future<bool> signUp({
+    required String name,
+    required String email,
+    required String password,
+  });
 }

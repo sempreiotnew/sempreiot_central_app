@@ -45,4 +45,31 @@ final class AuthRepositoryImpl implements IAuthRepository {
   Future<void> signOut() async {
     await Amplify.Auth.signOut();
   }
+
+  @override
+  Future<void> signInWithEmailPassword({
+    required String email,
+    required String password,
+  }) async {
+    await Amplify.Auth.signIn(username: email, password: password);
+  }
+
+  @override
+  Future<bool> signUp({
+    required String name,
+    required String email,
+    required String password,
+  }) async {
+    final result = await Amplify.Auth.signUp(
+      username: email,
+      password: password,
+      options: SignUpOptions(
+        userAttributes: {
+          AuthUserAttributeKey.name: name,
+          AuthUserAttributeKey.email: email,
+        },
+      ),
+    );
+    return result.isSignUpComplete;
+  }
 }

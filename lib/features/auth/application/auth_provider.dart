@@ -27,6 +27,17 @@ class AuthNotifier extends AsyncNotifier<AuthUserEntity?> {
         () => ref.read(authRepositoryProvider).signInWithApple(),
       );
 
+  Future<void> signInWithEmailPassword({
+    required String email,
+    required String password,
+  }) =>
+      _signIn(
+        () => ref.read(authRepositoryProvider).signInWithEmailPassword(
+              email: email,
+              password: password,
+            ),
+      );
+
   Future<void> signOut() async {
     state = const AsyncLoading();
     await ref.read(authRepositoryProvider).signOut();
