@@ -21,7 +21,7 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
   bool get isConnected => _bridge.isConnected;
 
   @override
-  Future<void> connect() async {
+  Future<void> connect({void Function()? onDisconnected}) async {
     final creds = await _credentialsService.fetch();
 
     final signedUrl = SigV4Signer.buildSignedWebSocketUrl(
@@ -32,7 +32,11 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
       sessionToken: creds.sessionToken,
     );
 
-    await _bridge.connect(signedUrl, creds.identityId);
+    await _bridge.connect(
+      signedUrl,
+      creds.identityId,
+      onDisconnected: onDisconnected,
+    );
   }
 
   @override

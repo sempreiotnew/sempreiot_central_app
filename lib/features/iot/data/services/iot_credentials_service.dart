@@ -3,9 +3,9 @@ import 'dart:io';
 
 import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
-import 'package:aws_common/aws_common.dart';
 import 'package:aws_signature_v4/aws_signature_v4.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 class AwsCredentials {
   final String accessKeyId;
@@ -44,9 +44,46 @@ class IotCredentialsService {
       identityId: identityId,
     );
 
-    await _diagnoseCallerIdentity(awsCreds);
+    // if (!kIsWeb) await _diagnoseCallerIdentity(awsCreds);
+
+    await _diagnoseUserCreate(userPoolTokens?.idToken.raw);
 
     return awsCreds;
+  }
+
+  static Future<void> _diagnoseUserCreate(String? idToken) async {
+    const url = 'https://4lov3vemle.execute-api.us-east-1.amazonaws.com/user/create';
+    debugPrint('[API] ── POST /user/create ───────────────────────');
+
+    if (idToken == null) {
+      debugPrint('[API] SKIP — no ID token (user not authenticated)');
+      debugPrint('[API] ────────────────────────────────────────────');
+      return;
+    }
+
+    debugPrint('[API] Token  : ${idToken.substring(0, 20)}...${idToken.substring(idToken.length - 10)}');
+
+    try {
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $idToken',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({}),
+      );
+
+      debugPrint('[API] Status : ${response.statusCode}');
+      debugPrint('[API] Headers: ${response.headers}');
+      debugPrint('[API] Body   : ${response.body}');
+    } on http.ClientException catch (e) {
+      debugPrint('[API] ClientException: ${e.message}');
+    } catch (e, stack) {
+      debugPrint('[API] Unexpected error: $e');
+      debugPrint('[API] Stack: $stack');
+    }
+
+    debugPrint('[API] ────────────────────────────────────────────');
   }
 
   /// Calls STS GetCallerIdentity to reveal exactly which IAM role these

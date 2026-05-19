@@ -15,6 +15,7 @@ class IotMqttBridge {
   Timer? _pingTimer;
   Completer<void>? _connackCompleter;
   bool _connackReceived = false;
+  void Function()? _onDisconnected;
 
   bool get isConnected => _ws?.readyState == WebSocket.open;
 
@@ -22,17 +23,18 @@ class IotMqttBridge {
     String signedUrl,
     String clientId, {
     int keepAliveSec = 60,
+    void Function()? onDisconnected,
   }) async {
+    _onDisconnected = onDisconnected;
     _connackCompleter = Completer();
     _connackReceived = false;
     _publishCtrl = StreamController.broadcast();
 
-    debugPrint('[IoT] connecting to: ${signedUrl.substring(0, 80)}...');
+    debugPrint('[IoT] connecting — clientId: $clientId');
     try {
       _ws = await WebSocket.connect(signedUrl, protocols: const ['mqtt']);
-      print(_ws?.readyState);
-      print(isConnected);
     } on WebSocketException catch (e) {
+      debugPrint('[IoT] WebSocket upgrade failed');
       await _diagnose(signedUrl, e);
       rethrow;
     }
@@ -45,26 +47,32 @@ class IotMqttBridge {
       onTimeout: () => throw TimeoutException('MQTT CONNACK timeout'),
     );
 
+    debugPrint('[IoT] MQTT connected ✓');
+
     _pingTimer = Timer.periodic(Duration(seconds: keepAliveSec ~/ 2), (_) {
       if (isConnected) _ws!.add(Uint8List.fromList(const [0xC0, 0x00]));
     });
   }
 
   void disconnect() {
+    _onDisconnected = null; // intentional — suppress reconnect callback
     _pingTimer?.cancel();
     if (isConnected) _ws?.add(Uint8List.fromList(const [0xE0, 0x00]));
     _ws?.close();
     _ws = null;
     _publishCtrl?.close();
+    debugPrint('[IoT] disconnected');
   }
 
   void publish(String topic, String payload, {int qos = 1}) {
     if (!isConnected) throw StateError('Not connected');
+    debugPrint('[IoT] → publish [$topic]: $payload');
     _ws!.add(Uint8List.fromList(_buildPublish(topic, payload, _pid(), qos)));
   }
 
   Stream<({String topic, String payload})> subscribe(String topic, {int qos = 1}) {
     if (!isConnected) throw StateError('Not connected');
+    debugPrint('[IoT] subscribing to: $topic');
     _ws!.add(Uint8List.fromList(_buildSubscribe(topic, _pid(), qos)));
     return _publishCtrl!.stream.where((m) => _topicMatches(m.topic, topic));
   }
@@ -83,6 +91,7 @@ class IotMqttBridge {
         if (rc == 0) {
           _connackCompleter?.complete();
         } else {
+          debugPrint('[IoT] CONNACK refused — code $rc');
           _connackCompleter?.completeError(
             Exception('MQTT connection refused (code $rc)'),
           );
@@ -94,7 +103,7 @@ class IotMqttBridge {
     switch (type) {
       case 3:
         _handlePublish(data);
-      case 4: // PUBACK — already sent, nothing to do
+      case 4: // PUBACK
         break;
       case 13: // PINGRESP
         break;
@@ -102,16 +111,20 @@ class IotMqttBridge {
   }
 
   void _onError(Object error) {
+    debugPrint('[IoT] connection error: $error');
     if (!(_connackCompleter?.isCompleted ?? true)) {
       _connackCompleter?.completeError(error);
     }
     _publishCtrl?.addError(error);
   }
 
-  void _onDone() => _publishCtrl?.close();
+  void _onDone() {
+    debugPrint('[IoT] connection closed');
+    _publishCtrl?.close();
+    _onDisconnected?.call();
+  }
 
   void _handlePublish(Uint8List data) {
-    // Skip the variable-length remaining-length field
     var i = 1;
     while ((data[i++] & 0x80) != 0) {}
 
@@ -132,10 +145,7 @@ class IotMqttBridge {
 
   int _pid() => _nextPacketId = (_nextPacketId % 0xFFFF) + 1;
 
-  /// Makes a real HTTP request with WebSocket upgrade headers so we can
-  /// read the actual status code and body that AWS IoT Core returns.
   static Future<void> _diagnose(String wsUrl, WebSocketException original) async {
-    debugPrint('[IoT] WebSocket upgrade failed — fetching HTTP diagnostic...');
     try {
       final httpUrl = wsUrl.replaceFirst(RegExp(r'^wss://'), 'https://');
       final client = HttpClient();
@@ -147,20 +157,12 @@ class IotMqttBridge {
         ..set('Sec-WebSocket-Protocol', 'mqtt')
         ..set('Sec-WebSocket-Key',
             base64.encode(List<int>.generate(16, (_) => Random().nextInt(256))));
-
       final response = await request.close();
       final body = await response.transform(utf8.decoder).join();
       client.close(force: true);
-
-      debugPrint('[IoT] ── AWS response ──────────────────────────');
-      debugPrint('[IoT] Status : ${response.statusCode} ${response.reasonPhrase}');
-      response.headers.forEach((name, values) =>
-          debugPrint('[IoT] Header : $name: ${values.join(', ')}'));
-      debugPrint('[IoT] Body   : $body');
-      debugPrint('[IoT] ─────────────────────────────────────────');
+      debugPrint('[IoT] AWS response ${response.statusCode}: $body');
     } catch (e) {
-      debugPrint('[IoT] Diagnostic request failed: $e');
-      debugPrint('[IoT] Original error: $original');
+      debugPrint('[IoT] diagnostic failed: $e — original: $original');
     }
   }
 
