@@ -5,6 +5,7 @@ String buildAmplifyConfig() {
   final region = dotenv.env['AWS_REGION']!;
   final poolId = dotenv.env['AWS_COGNITO_POOL_ID']!;
   final clientId = dotenv.env['AWS_COGNITO_CLIENT_ID']!;
+  final identityPoolId = dotenv.env['AWS_COGNITO_IDENTITY_POOL_ID']!;
   final webDomain = dotenv.env['AWS_COGNITO_DOMAIN']!
       .replaceAll('https://', '')
       .replaceAll('http://', '');
@@ -33,6 +34,14 @@ String buildAmplifyConfig() {
       "awsCognitoAuthPlugin": {
         "UserAgent": "aws-amplify-cli/2.0",
         "Version": "1.0",
+        "CredentialsProvider": {
+          "CognitoIdentity": {
+            "Default": {
+              "PoolId": "$identityPoolId",
+              "Region": "$region"
+            }
+          }
+        },
         "CognitoUserPool": {
           "Default": {
             "PoolId": "$poolId",
