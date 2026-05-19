@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/repositories/iot_mqtt_repository_impl.dart';
@@ -25,8 +26,15 @@ class IotConnectionNotifier extends AsyncNotifier<bool> {
   Future<void> connect() async {
     state = const AsyncLoading();
     try {
-      await ref.read(iotMqttRepositoryProvider).connect();
+      final repo = ref.read(iotMqttRepositoryProvider);
+      await repo.connect();
       state = const AsyncData(true);
+
+      // DEBUG: subscribe to all topics to confirm messages flow
+      repo.subscribe('#').listen(
+        (msg) => debugPrint('[IoT] # msg — topic: ${msg.topic} | payload: ${msg.payload}'),
+        onError: (e) => debugPrint('[IoT] # subscription error: $e'),
+      );
     } catch (e, st) {
       state = AsyncError(e, st);
     }
