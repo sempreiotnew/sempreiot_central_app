@@ -1,4 +1,6 @@
-import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
+import 'dart:async';
+
+import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -15,8 +17,31 @@ final authNotifierProvider =
 
 class AuthNotifier extends AsyncNotifier<AuthUserEntity?> {
   @override
-  Future<AuthUserEntity?> build() {
-    return ref.read(authRepositoryProvider).getCurrentUser();
+  Future<AuthUserEntity?> build() async {
+    final user = await ref.read(authRepositoryProvider).getCurrentUser();
+    if (user != null) _startRefreshTimer();
+    return user;
+  }
+
+  // Keeps the access token alive in the background.
+  // Fires every 20 min — well before even the minimum Cognito access token
+  // expiry (which can be as low as 5 min, and is commonly set to 30 min).
+  // If the refresh token itself has expired (30-day default), signs out.
+  void _startRefreshTimer() {
+    final timer = Timer.periodic(const Duration(minutes: 20), (_) async {
+      try {
+        await Amplify.Auth.fetchAuthSession(
+          options: const FetchAuthSessionOptions(forceRefresh: true),
+        );
+        debugPrint('[Auth] token refreshed silently');
+      } on SessionExpiredException {
+        debugPrint('[Auth] refresh token expired — signing out');
+        signOut();
+      } catch (e) {
+        debugPrint('[Auth] token refresh failed (will retry): $e');
+      }
+    });
+    ref.onDispose(timer.cancel);
   }
 
   Future<void> signInWithGoogle() => _signIn(
@@ -54,6 +79,7 @@ class AuthNotifier extends AsyncNotifier<AuthUserEntity?> {
       await signInFn();
       final user = await ref.read(authRepositoryProvider).getCurrentUser();
       state = AsyncData(user);
+      if (user != null) _startRefreshTimer();
     } on UserCancelledException {
       state = const AsyncData(null);
     } catch (e, st) {

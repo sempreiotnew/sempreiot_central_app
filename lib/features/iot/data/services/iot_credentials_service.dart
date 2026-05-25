@@ -22,20 +22,32 @@ class AwsCredentials {
 }
 
 class IotCredentialsService {
+  static const _forceRefreshAfter = Duration(minutes: 25);
+  DateTime? _lastForcedRefresh;
+
   Future<AwsCredentials> fetch() async {
-    final session =
-        await Amplify.Auth.fetchAuthSession() as CognitoAuthSession;
+    // Force a token refresh on the first call (covers hot restart — new instance,
+    // _lastForcedRefresh is null) or after 25 min (safety net in case the auth
+    // timer missed a beat). Rapid reconnects within that window use Amplify's
+    // cache, which avoids hammering Cognito's token endpoint every 5 seconds.
+    final now = DateTime.now();
+    final shouldForce = _lastForcedRefresh == null ||
+        now.difference(_lastForcedRefresh!) >= _forceRefreshAfter;
+    if (shouldForce) _lastForcedRefresh = now;
+
+    final session = await Amplify.Auth.fetchAuthSession(
+      options: FetchAuthSessionOptions(forceRefresh: shouldForce),
+    ) as CognitoAuthSession;
 
     final identityId = session.identityIdResult.value;
-    final userPoolTokens = session.userPoolTokensResult.valueOrNull;
     final creds = session.credentialsResult.value;
 
-    debugPrint('[IoT] ── Credentials diagnostic ─────────────────');
-    debugPrint('[IoT] Identity ID   : $identityId');
-    debugPrint('[IoT] Is authenticated: ${userPoolTokens != null}');
-    debugPrint('[IoT] AccessKeyId   : ${creds.accessKeyId.substring(0, 8)}...');
-    debugPrint('[IoT] Has SessionToken: ${(creds.sessionToken ?? '').isNotEmpty}');
-    debugPrint('[IoT] ────────────────────────────────────────────');
+    // debugPrint('[IoT] ── Credentials diagnostic ─────────────────');
+    // debugPrint('[IoT] Identity ID   : $identityId');
+    // debugPrint('[IoT] Is authenticated: ${userPoolTokens != null}');
+    // debugPrint('[IoT] AccessKeyId   : ${creds.accessKeyId.substring(0, 8)}...');
+    // debugPrint('[IoT] Has SessionToken: ${(creds.sessionToken ?? '').isNotEmpty}');
+    // debugPrint('[IoT] ────────────────────────────────────────────');
 
     final awsCreds = AwsCredentials(
       accessKeyId: creds.accessKeyId,
@@ -46,7 +58,7 @@ class IotCredentialsService {
 
     // if (!kIsWeb) await _diagnoseCallerIdentity(awsCreds);
 
-    await _diagnoseUserCreate(userPoolTokens?.idToken.raw);
+    // await _diagnoseUserCreate(userPoolTokens?.idToken.raw);
 
     return awsCreds;
   }

@@ -14,26 +14,66 @@ String get _iotEndpoint => dotenv.env['AWS_IOT_ENDPOINT']!;
 String get _region => dotenv.env['AWS_REGION']!;
 
 class IotMqttRepositoryImpl implements IIotMqttRepository {
+  // Static singleton so there is never more than one WebSocket open at a time.
+  // Flutter Web hot restart does NOT reset static state (JS runtime persists),
+  // so the same instance — and its existing connection — survives across
+  // restarts. Without this, each restart creates a new instance, connects with
+  // the same client-ID, AWS IoT does a session takeover (kicks the old socket),
+  // the old notifier sees the disconnect, reschedules a connect, kicks the new
+  // socket, and the loop repeats indefinitely.
+  static IotMqttRepositoryImpl? _shared;
+
+  factory IotMqttRepositoryImpl({IotCredentialsService? credentialsService}) {
+    return _shared ??= IotMqttRepositoryImpl._internal(
+      credentialsService ?? IotCredentialsService(),
+    );
+  }
+
+  IotMqttRepositoryImpl._internal(this._credentialsService);
+
   final IotCredentialsService _credentialsService;
 
   WebSocketChannel? _channel;
   StreamSubscription<dynamic>? _subscription;
   int _nextPacketId = 0;
+  int _generation = 0;
   StreamController<({String topic, String payload})>? _publishCtrl;
   Timer? _pingTimer;
   Completer<void>? _connackCompleter;
   bool _connackReceived = false;
   bool _connected = false;
+  DateTime? _connectedAt;
   void Function()? _onDisconnected;
-
-  IotMqttRepositoryImpl({IotCredentialsService? credentialsService})
-      : _credentialsService = credentialsService ?? IotCredentialsService();
 
   @override
   bool get isConnected => _connected;
 
   @override
   Future<void> connect({void Function()? onDisconnected}) async {
+    // If the connection survived a hot restart, just transfer the disconnect
+    // callback to the new notifier — no new WebSocket, no session takeover.
+    if (_connected) {
+      _onDisconnected = onDisconnected;
+      debugPrint('[IoT] connect() called while already connected — handing off callback');
+      return;
+    }
+
+    // Bump generation so any _onDone/onError from the previous socket —
+    // including the one AWS IoT fires when it kicks the old connection on
+    // duplicate client-ID — is silently dropped and cannot trigger a reconnect.
+    final gen = ++_generation;
+    _onDisconnected = null;
+    await _subscription?.cancel();
+    _subscription = null;
+    _pingTimer?.cancel();
+    _pingTimer = null;
+    _connected = false;
+    _connectedAt = null; // reset so age-check in _onDone is always fresh
+    try { _channel?.sink.close(); } catch (_) {}
+    _channel = null;
+    _publishCtrl?.close();
+    _publishCtrl = null;
+
     final creds = await _credentialsService.fetch();
 
     final signedUrl = SigV4Signer.buildSignedWebSocketUrl(
@@ -60,8 +100,8 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
 
     _subscription = _channel!.stream.listen(
       _onData,
-      onError: _onError,
-      onDone: _onDone,
+      onError: (e) { if (gen == _generation) _onError(e); },
+      onDone: () { if (gen == _generation) _onDone(); },
       cancelOnError: false,
     );
 
@@ -72,7 +112,13 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
       onTimeout: () => throw TimeoutException('MQTT CONNACK timeout'),
     );
 
+    // Guard: _onDone may have fired in the gap between CONNACK and here
+    if (_publishCtrl?.isClosed ?? true) {
+      throw StateError('Connection closed immediately after CONNACK');
+    }
+
     _connected = true;
+    _connectedAt = DateTime.now();
     debugPrint('[IoT] MQTT connected ✓');
 
     _pingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
@@ -157,9 +203,35 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
 
   void _onDone() {
     debugPrint('[IoT] connection closed');
+    final wasConnected = _connected;
+    final connectedAt = _connectedAt;
     _connected = false;
+    _connectedAt = null;
     _publishCtrl?.close();
-    _onDisconnected?.call();
+    if (wasConnected) {
+      // Treat null connectedAt as an immediate drop (duration zero) so we
+      // always take the deferred path rather than calling _onDisconnected
+      // directly. A null here means _onDone raced with the connect path.
+      final age = connectedAt != null
+          ? DateTime.now().difference(connectedAt)
+          : Duration.zero;
+      if (age < const Duration(seconds: 3)) {
+        // Connection dropped very soon after CONNACK — almost certainly AWS IoT
+        // closing the previous session's socket (hot restart / duplicate client ID).
+        // Delay the reconnect callback so the old socket is fully gone before
+        // we open a new connection with the same client ID.
+        final gen = _generation;
+        debugPrint('[IoT] connection dropped within ${age.inMilliseconds}ms — deferring reconnect');
+        Future.delayed(const Duration(seconds: 10), () {
+          if (gen == _generation && !_connected) _onDisconnected?.call();
+        });
+      } else {
+        _onDisconnected?.call();
+      }
+    } else if (!(_connackCompleter?.isCompleted ?? true)) {
+      // Channel closed before CONNACK — fail fast instead of waiting for timeout
+      _connackCompleter!.completeError(StateError('Connection closed during handshake'));
+    }
   }
 
   void _handlePublish(Uint8List data) {
