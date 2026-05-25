@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../features/auth/application/auth_provider.dart';
+import '../../../features/auth/application/user_sync_provider.dart';
 import '../../../features/iot/application/iot_provider.dart';
 import '../splash/splash_screen.dart';
 
@@ -18,15 +19,8 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   bool _iotReady = false;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(iotConnectionProvider.notifier).connect();
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final syncState = ref.watch(userSyncProvider);
     final iotState = ref.watch(iotConnectionProvider);
 
     // Latch ready on first successful connect (field assignment in build is
@@ -34,13 +28,26 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     // the next rebuild from the provider change will read the updated value).
     if (iotState.valueOrNull == true) _iotReady = true;
 
+    // Trigger MQTT connect once user sync succeeds.
+    ref.listen(userSyncProvider, (_, next) {
+      if (next is AsyncData) {
+        ref.read(iotConnectionProvider.notifier).connect();
+      }
+      if (next is AsyncError) {
+        debugPrint('[UserSync] failed — signing out: ${next.error}');
+        ref.read(authNotifierProvider.notifier).signOut();
+      }
+    });
+
     ref.listen(iotConnectionProvider, (_, next) {
       next.whenOrNull(
         error: (e, st) => debugPrint('[IoT] connection error: $e\n$st'),
       );
     });
 
-    if (!_iotReady) return const SplashScreen();
+    if (syncState.isLoading || syncState.hasError || !_iotReady) {
+      return const SplashScreen();
+    }
 
     return Scaffold(
       body: Center(
