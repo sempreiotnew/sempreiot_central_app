@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../features/auth/application/auth_provider.dart';
 import '../../../features/iot/application/iot_provider.dart';
+import '../splash/splash_screen.dart';
 
 class MainScreen extends ConsumerStatefulWidget {
   const MainScreen({super.key});
@@ -12,6 +13,10 @@ class MainScreen extends ConsumerStatefulWidget {
 }
 
 class _MainScreenState extends ConsumerState<MainScreen> {
+  // Latches true on the first successful MQTT connection so that later
+  // reconnects don't flash back to the splash screen.
+  bool _iotReady = false;
+
   @override
   void initState() {
     super.initState();
@@ -22,12 +27,20 @@ class _MainScreenState extends ConsumerState<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Log IoT state changes to console only — never surface raw errors on screen.
+    final iotState = ref.watch(iotConnectionProvider);
+
+    // Latch ready on first successful connect (field assignment in build is
+    // safe here — it doesn't call setState so no extra rebuild is triggered;
+    // the next rebuild from the provider change will read the updated value).
+    if (iotState.valueOrNull == true) _iotReady = true;
+
     ref.listen(iotConnectionProvider, (_, next) {
       next.whenOrNull(
         error: (e, st) => debugPrint('[IoT] connection error: $e\n$st'),
       );
     });
+
+    if (!_iotReady) return const SplashScreen();
 
     return Scaffold(
       body: Center(
