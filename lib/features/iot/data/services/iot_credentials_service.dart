@@ -9,12 +9,14 @@ class AwsCredentials {
   final String secretAccessKey;
   final String sessionToken;
   final String identityId;
+  final String userId; // Cognito User Pool sub — stable, platform-independent primary key
 
   const AwsCredentials({
     required this.accessKeyId,
     required this.secretAccessKey,
     required this.sessionToken,
     required this.identityId,
+    required this.userId,
   });
 }
 
@@ -38,23 +40,26 @@ class IotCredentialsService {
 
     final identityId = session.identityIdResult.value;
     final creds = session.credentialsResult.value;
+    final userId = session.userPoolTokensResult.value.userId;
 
     debugPrint('[IoT] ── Credentials AUTH ─────────────────');
+    debugPrint('[IoT] User Pool sub : $userId');
     debugPrint('[IoT] Identity ID   : $identityId');
     debugPrint('[IoT] AccessKeyId   : ${creds.accessKeyId}');
     debugPrint('[IoT] isSignedIn: ${session.isSignedIn} ');
     debugPrint('[IoT] ────────────────────────────────────────────');
-    
 
     final awsCreds = AwsCredentials(
       accessKeyId: creds.accessKeyId,
       secretAccessKey: creds.secretAccessKey,
       sessionToken: creds.sessionToken ?? '',
       identityId: identityId,
+      userId: userId,
     );
 
 
     return awsCreds;
   }
 
+  void reset() => _lastForcedRefresh = null;
 }

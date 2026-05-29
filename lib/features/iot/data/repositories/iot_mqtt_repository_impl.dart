@@ -90,7 +90,7 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
     _connected = false;
     _publishCtrl = StreamController.broadcast();
 
-    debugPrint('[IoT] connecting — clientId: ${creds.identityId}');
+    debugPrint('[IoT] connecting — clientId: ${creds.userId}');
 
     _channel = WebSocketChannel.connect(
       Uri.parse(signedUrl),
@@ -105,7 +105,7 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
       cancelOnError: false,
     );
 
-    _channel!.sink.add(Uint8List.fromList(_mqttConnect(creds.identityId)));
+    _channel!.sink.add(Uint8List.fromList(_mqttConnect(creds.userId)));
 
     await _connackCompleter!.future.timeout(
       const Duration(seconds: 10),
@@ -130,6 +130,7 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
   void disconnect() {
     _onDisconnected = null; // suppress reconnect callback
     _connected = false;
+    _credentialsService.reset();
     _pingTimer?.cancel();
     _pingTimer = null;
     try {

@@ -14,16 +14,24 @@ class UserApiService {
     final session = await Amplify.Auth.fetchAuthSession() as CognitoAuthSession;
     final idToken = session.userPoolTokensResult.value.idToken;
     final rawToken = idToken.raw;
-    
 
     // Extract email and phone directly from the ID token claims — avoids
     // a fetchUserAttributes() call that requires the cognito:user.admin scope.
     // Non-standard claims (email, phone_number) are in customClaims.
+    final name = idToken.claims.customClaims['name'] as String? ?? '';
     final email = idToken.claims.customClaims['email'] as String? ?? '';
     final phone = idToken.claims.customClaims['phone_number'] as String? ?? '';
-    debugPrint('[UserAPI] claims — email: $email, phone: $phone');
+    final identityId = session.identityIdResult.value;
 
-    final body = jsonEncode({'email': email, 'phone': phone});
+    debugPrint('[UserAPI] claims — email: $email, phone: $phone');
+    debugPrint('[UserAPI] identityId: $identityId');
+
+    final body = jsonEncode({
+      'subId': session.userPoolTokensResult.value.userId,
+      'identityId': identityId,
+      'email': email,
+      'name': name,
+    });
     debugPrint('[UserAPI] POST $_endpoint');
     debugPrint('[UserAPI] body: $body');
 
