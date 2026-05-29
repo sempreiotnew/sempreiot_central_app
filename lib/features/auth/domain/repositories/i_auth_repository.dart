@@ -1,4 +1,5 @@
 import '../entities/auth_user_entity.dart';
+import '../entities/sign_up_result.dart';
 
 abstract interface class IAuthRepository {
   Future<AuthUserEntity?> getCurrentUser();
@@ -10,9 +11,19 @@ abstract interface class IAuthRepository {
     required String password,
   });
 
-  Future<bool> signUp({
+  Future<AuthSignUpResult> signUp({
     required String name,
-    required String email,
+    required String identifier,
     required String password,
+    required bool isPhone,
+  });
+
+  Future<void> confirmSignUp({
+    required String username,
+    required String code,
+  });
+
+  Future<void> resendSignUpCode({
+    required String username,
   });
 }

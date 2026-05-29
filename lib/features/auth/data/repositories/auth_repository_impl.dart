@@ -2,6 +2,7 @@ import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
 
 import '../../domain/entities/auth_user_entity.dart';
+import '../../domain/entities/sign_up_result.dart' show AuthSignUpResult;
 import '../../domain/repositories/i_auth_repository.dart';
 
 final class AuthRepositoryImpl implements IAuthRepository {
@@ -55,21 +56,44 @@ final class AuthRepositoryImpl implements IAuthRepository {
   }
 
   @override
-  Future<bool> signUp({
+  Future<AuthSignUpResult> signUp({
     required String name,
-    required String email,
+    required String identifier,
     required String password,
+    required bool isPhone,
   }) async {
+    final attrs = <AuthUserAttributeKey, String>{
+      AuthUserAttributeKey.name: name,
+    };
+    if (isPhone) {
+      attrs[AuthUserAttributeKey.phoneNumber] = identifier;
+    } else {
+      attrs[AuthUserAttributeKey.email] = identifier;
+    }
     final result = await Amplify.Auth.signUp(
-      username: email,
+      username: identifier,
       password: password,
-      options: SignUpOptions(
-        userAttributes: {
-          AuthUserAttributeKey.name: name,
-          AuthUserAttributeKey.email: email,
-        },
-      ),
+      options: SignUpOptions(userAttributes: attrs),
     );
-    return result.isSignUpComplete;
+    return AuthSignUpResult(
+      username: identifier,
+      isComplete: result.isSignUpComplete,
+    );
+  }
+
+  @override
+  Future<void> confirmSignUp({
+    required String username,
+    required String code,
+  }) async {
+    await Amplify.Auth.confirmSignUp(
+      username: username,
+      confirmationCode: code,
+    );
+  }
+
+  @override
+  Future<void> resendSignUpCode({required String username}) async {
+    await Amplify.Auth.resendSignUpCode(username: username);
   }
 }

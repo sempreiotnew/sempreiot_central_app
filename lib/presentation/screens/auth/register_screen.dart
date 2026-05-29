@@ -5,6 +5,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../features/auth/application/register_provider.dart';
 import '../../widgets/iot_network_animation.dart';
+import 'otp_verification_screen.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -16,16 +17,17 @@ class RegisterScreen extends ConsumerStatefulWidget {
 class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
-  final _emailCtrl = TextEditingController();
+  final _identifierCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
+  bool _usePhone = false;
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
 
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _emailCtrl.dispose();
+    _identifierCtrl.dispose();
     _passwordCtrl.dispose();
     _confirmCtrl.dispose();
     super.dispose();
@@ -36,8 +38,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     if (!_formKey.currentState!.validate()) return;
     ref.read(registerNotifierProvider.notifier).signUp(
           name: _nameCtrl.text.trim(),
-          email: _emailCtrl.text.trim(),
+          identifier: _identifierCtrl.text.trim(),
           password: _passwordCtrl.text,
+          isPhone: _usePhone,
         );
   }
 
@@ -47,7 +50,20 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final isLoading = state is RegisterLoading;
 
     ref.listen(registerNotifierProvider, (_, next) {
-      if (next is RegisterError) {
+      if (next is RegisterSuccess && next.requiresConfirmation) {
+        ref.read(registerNotifierProvider.notifier).reset();
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => OtpVerificationScreen(
+              username: next.username,
+              password: next.password,
+              isPhone: next.isPhone,
+            ),
+          ),
+        );
+      } else if (next is RegisterSuccess && !next.requiresConfirmation) {
+        ref.read(registerNotifierProvider.notifier).reset();
+      } else if (next is RegisterError) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(next.message),
@@ -59,16 +75,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       }
     });
 
-    if (state is RegisterSuccess) {
-      return _SuccessView(
-        requiresConfirmation: state.requiresConfirmation,
-        onBack: () {
-          ref.read(registerNotifierProvider.notifier).reset();
-          Navigator.of(context).pop();
-        },
-      );
-    }
-
     return Scaffold(
       backgroundColor: AppColors.backgroundDark,
       body: LayoutBuilder(
@@ -77,12 +83,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             return _DesktopLayout(
               formKey: _formKey,
               nameCtrl: _nameCtrl,
-              emailCtrl: _emailCtrl,
+              identifierCtrl: _identifierCtrl,
               passwordCtrl: _passwordCtrl,
               confirmCtrl: _confirmCtrl,
+              usePhone: _usePhone,
               obscurePassword: _obscurePassword,
               obscureConfirm: _obscureConfirm,
               isLoading: isLoading,
+              onToggleIdentifierMode: () => setState(() {
+                _usePhone = !_usePhone;
+                _identifierCtrl.clear();
+              }),
               onTogglePassword: () =>
                   setState(() => _obscurePassword = !_obscurePassword),
               onToggleConfirm: () =>
@@ -94,12 +105,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           return _MobileLayout(
             formKey: _formKey,
             nameCtrl: _nameCtrl,
-            emailCtrl: _emailCtrl,
+            identifierCtrl: _identifierCtrl,
             passwordCtrl: _passwordCtrl,
             confirmCtrl: _confirmCtrl,
+            usePhone: _usePhone,
             obscurePassword: _obscurePassword,
             obscureConfirm: _obscureConfirm,
             isLoading: isLoading,
+            onToggleIdentifierMode: () => setState(() {
+              _usePhone = !_usePhone;
+              _identifierCtrl.clear();
+            }),
             onTogglePassword: () =>
                 setState(() => _obscurePassword = !_obscurePassword),
             onToggleConfirm: () =>
@@ -119,12 +135,14 @@ class _MobileLayout extends StatelessWidget {
   const _MobileLayout({
     required this.formKey,
     required this.nameCtrl,
-    required this.emailCtrl,
+    required this.identifierCtrl,
     required this.passwordCtrl,
     required this.confirmCtrl,
+    required this.usePhone,
     required this.obscurePassword,
     required this.obscureConfirm,
     required this.isLoading,
+    required this.onToggleIdentifierMode,
     required this.onTogglePassword,
     required this.onToggleConfirm,
     required this.onSubmit,
@@ -133,12 +151,14 @@ class _MobileLayout extends StatelessWidget {
 
   final GlobalKey<FormState> formKey;
   final TextEditingController nameCtrl;
-  final TextEditingController emailCtrl;
+  final TextEditingController identifierCtrl;
   final TextEditingController passwordCtrl;
   final TextEditingController confirmCtrl;
+  final bool usePhone;
   final bool obscurePassword;
   final bool obscureConfirm;
   final bool isLoading;
+  final VoidCallback onToggleIdentifierMode;
   final VoidCallback onTogglePassword;
   final VoidCallback onToggleConfirm;
   final VoidCallback onSubmit;
@@ -154,7 +174,6 @@ class _MobileLayout extends StatelessWidget {
         SafeArea(
           child: Column(
             children: [
-              // Back button row — full width, left-aligned
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                 child: Align(
@@ -162,7 +181,6 @@ class _MobileLayout extends StatelessWidget {
                   child: _BackButton(onTap: onLoginTap),
                 ),
               ),
-              // Scrollable body
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -170,7 +188,6 @@ class _MobileLayout extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const SizedBox(height: 24),
-                      // Centered branding — same as desktop right pane
                       Center(
                         child: Image.asset(
                           'assets/images/logo_no_shadow.png',
@@ -203,7 +220,8 @@ class _MobileLayout extends StatelessWidget {
                             color: AppColors.secondary.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                              color: AppColors.secondary.withValues(alpha: 0.3),
+                              color:
+                                  AppColors.secondary.withValues(alpha: 0.3),
                             ),
                           ),
                           child: const Text(
@@ -231,12 +249,14 @@ class _MobileLayout extends StatelessWidget {
                       _RegisterForm(
                         formKey: formKey,
                         nameCtrl: nameCtrl,
-                        emailCtrl: emailCtrl,
+                        identifierCtrl: identifierCtrl,
                         passwordCtrl: passwordCtrl,
                         confirmCtrl: confirmCtrl,
+                        usePhone: usePhone,
                         obscurePassword: obscurePassword,
                         obscureConfirm: obscureConfirm,
                         isLoading: isLoading,
+                        onToggleIdentifierMode: onToggleIdentifierMode,
                         onTogglePassword: onTogglePassword,
                         onToggleConfirm: onToggleConfirm,
                         onSubmit: onSubmit,
@@ -268,12 +288,14 @@ class _DesktopLayout extends StatelessWidget {
   const _DesktopLayout({
     required this.formKey,
     required this.nameCtrl,
-    required this.emailCtrl,
+    required this.identifierCtrl,
     required this.passwordCtrl,
     required this.confirmCtrl,
+    required this.usePhone,
     required this.obscurePassword,
     required this.obscureConfirm,
     required this.isLoading,
+    required this.onToggleIdentifierMode,
     required this.onTogglePassword,
     required this.onToggleConfirm,
     required this.onSubmit,
@@ -282,12 +304,14 @@ class _DesktopLayout extends StatelessWidget {
 
   final GlobalKey<FormState> formKey;
   final TextEditingController nameCtrl;
-  final TextEditingController emailCtrl;
+  final TextEditingController identifierCtrl;
   final TextEditingController passwordCtrl;
   final TextEditingController confirmCtrl;
+  final bool usePhone;
   final bool obscurePassword;
   final bool obscureConfirm;
   final bool isLoading;
+  final VoidCallback onToggleIdentifierMode;
   final VoidCallback onTogglePassword;
   final VoidCallback onToggleConfirm;
   final VoidCallback onSubmit;
@@ -297,7 +321,6 @@ class _DesktopLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        // Form pane
         Container(
           width: 460,
           color: AppColors.backgroundDark,
@@ -335,12 +358,14 @@ class _DesktopLayout extends StatelessWidget {
                       _RegisterForm(
                         formKey: formKey,
                         nameCtrl: nameCtrl,
-                        emailCtrl: emailCtrl,
+                        identifierCtrl: identifierCtrl,
                         passwordCtrl: passwordCtrl,
                         confirmCtrl: confirmCtrl,
+                        usePhone: usePhone,
                         obscurePassword: obscurePassword,
                         obscureConfirm: obscureConfirm,
                         isLoading: isLoading,
+                        onToggleIdentifierMode: onToggleIdentifierMode,
                         onTogglePassword: onTogglePassword,
                         onToggleConfirm: onToggleConfirm,
                         onSubmit: onSubmit,
@@ -361,7 +386,6 @@ class _DesktopLayout extends StatelessWidget {
             ],
           ),
         ),
-        // Branding pane
         const Expanded(child: _BrandingPane()),
       ],
     );
@@ -444,12 +468,14 @@ class _RegisterForm extends StatelessWidget {
   const _RegisterForm({
     required this.formKey,
     required this.nameCtrl,
-    required this.emailCtrl,
+    required this.identifierCtrl,
     required this.passwordCtrl,
     required this.confirmCtrl,
+    required this.usePhone,
     required this.obscurePassword,
     required this.obscureConfirm,
     required this.isLoading,
+    required this.onToggleIdentifierMode,
     required this.onTogglePassword,
     required this.onToggleConfirm,
     required this.onSubmit,
@@ -458,12 +484,14 @@ class _RegisterForm extends StatelessWidget {
 
   final GlobalKey<FormState> formKey;
   final TextEditingController nameCtrl;
-  final TextEditingController emailCtrl;
+  final TextEditingController identifierCtrl;
   final TextEditingController passwordCtrl;
   final TextEditingController confirmCtrl;
+  final bool usePhone;
   final bool obscurePassword;
   final bool obscureConfirm;
   final bool isLoading;
+  final VoidCallback onToggleIdentifierMode;
   final VoidCallback onTogglePassword;
   final VoidCallback onToggleConfirm;
   final VoidCallback onSubmit;
@@ -488,19 +516,50 @@ class _RegisterForm extends StatelessWidget {
               return null;
             },
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+          // Identifier type toggle
+          Row(
+            children: [
+              _ToggleChip(
+                label: 'E-mail',
+                selected: !usePhone,
+                onTap: usePhone ? onToggleIdentifierMode : null,
+              ),
+              const SizedBox(width: 8),
+              _ToggleChip(
+                label: 'Telefone',
+                selected: usePhone,
+                onTap: !usePhone ? onToggleIdentifierMode : null,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
           _Field(
-            controller: emailCtrl,
-            label: 'E-mail',
-            keyboardType: TextInputType.emailAddress,
+            controller: identifierCtrl,
+            label: usePhone ? 'Telefone (ex: +5511999998888)' : 'E-mail',
+            keyboardType:
+                usePhone ? TextInputType.phone : TextInputType.emailAddress,
             textInputAction: TextInputAction.next,
-            validator: (v) {
-              if (v == null || v.trim().isEmpty) return 'Informe seu e-mail';
-              final ok =
-                  RegExp(r'^[\w.+\-]+@[a-zA-Z\d\-]+\.[a-zA-Z\d\-.]+$');
-              if (!ok.hasMatch(v.trim())) return 'E-mail inválido';
-              return null;
-            },
+            validator: usePhone
+                ? (v) {
+                    if (v == null || v.trim().isEmpty) {
+                      return 'Informe seu telefone';
+                    }
+                    if (!RegExp(r'^\+[1-9]\d{7,14}$').hasMatch(v.trim())) {
+                      return 'Use o formato internacional: +5511999998888';
+                    }
+                    return null;
+                  }
+                : (v) {
+                    if (v == null || v.trim().isEmpty) {
+                      return 'Informe seu e-mail';
+                    }
+                    if (!RegExp(r'^[\w.+\-]+@[a-zA-Z\d\-]+\.[a-zA-Z\d\-.]+$')
+                        .hasMatch(v.trim())) {
+                      return 'E-mail inválido';
+                    }
+                    return null;
+                  },
           ),
           const SizedBox(height: 12),
           _Field(
@@ -552,6 +611,51 @@ class _RegisterForm extends StatelessWidget {
 }
 
 // ── Form widgets ───────────────────────────────────────────────────────────
+
+class _ToggleChip extends StatelessWidget {
+  const _ToggleChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.secondary.withValues(alpha: 0.15)
+              : AppColors.surfaceDark,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected
+                ? AppColors.secondary.withValues(alpha: 0.6)
+                : AppColors.divider,
+            width: selected ? 1.5 : 1.0,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            color: selected
+                ? AppColors.secondary
+                : AppColors.textSecondaryDark,
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _Field extends StatelessWidget {
   const _Field({
@@ -723,97 +827,6 @@ class _BackButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           side: const BorderSide(color: AppColors.divider),
         ),
-      ),
-    );
-  }
-}
-
-// ── Success view ───────────────────────────────────────────────────────────
-
-class _SuccessView extends StatelessWidget {
-  const _SuccessView({
-    required this.requiresConfirmation,
-    required this.onBack,
-  });
-
-  final bool requiresConfirmation;
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.backgroundDark,
-      body: Stack(
-        children: [
-          const Positioned.fill(
-            child: RepaintBoundary(child: IoTNetworkAnimation()),
-          ),
-          SafeArea(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: AppColors.secondary.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: AppColors.secondary.withValues(alpha: 0.4),
-                          width: 1.5,
-                        ),
-                      ),
-                      child: const Icon(
-                        Icons.check_rounded,
-                        color: AppColors.secondary,
-                        size: 36,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Conta criada!',
-                      style: AppTextStyles.displayLarge,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      requiresConfirmation
-                          ? 'Verifique seu e-mail para confirmar o cadastro antes de entrar.'
-                          : 'Sua conta foi criada com sucesso. Faça login para continuar.',
-                      style: AppTextStyles.bodyMedium,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 40),
-                    SizedBox(
-                      height: 56,
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: onBack,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.secondary,
-                          foregroundColor: AppColors.backgroundDark,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text(
-                          'Ir para o login',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
