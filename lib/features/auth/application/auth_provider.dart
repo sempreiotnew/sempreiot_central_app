@@ -66,11 +66,11 @@ class AuthNotifier extends AsyncNotifier<AuthUserEntity?> {
   Future<void> signOut() async {
     state = const AsyncLoading();
     await ref.read(authRepositoryProvider).signOut();
-    // On web, Amplify redirects the page to Cognito's logout endpoint and back,
-    // so the app reloads fresh — no state update needed here (avoids double render).
-    if (!kIsWeb) {
-      state = const AsyncData(null);
-    }
+    // Always update state. OAuth (Hosted UI) sign-out causes a page reload
+    // anyway so the double-render is harmless; email/password sign-out on web
+    // has no redirect and requires this update to propagate to dependents
+    // (IoT disconnect, appInitProvider, etc.).
+    state = const AsyncData(null);
   }
 
   Future<void> _signIn(Future<void> Function() signInFn) async {

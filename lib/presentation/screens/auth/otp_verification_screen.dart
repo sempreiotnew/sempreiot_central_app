@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../features/app/application/app_init_provider.dart';
 import '../../../features/auth/application/otp_provider.dart';
 import '../../widgets/iot_network_animation.dart';
+import '../main/main_screen.dart';
 
 class OtpVerificationScreen extends ConsumerStatefulWidget {
   const OtpVerificationScreen({
@@ -15,11 +17,14 @@ class OtpVerificationScreen extends ConsumerStatefulWidget {
     required this.username,
     required this.password,
     required this.isPhone,
+    required this.displayIdentifier,
   });
 
   final String username;
   final String password;
   final bool isPhone;
+  /// Original email or phone number — used only for masked display.
+  final String displayIdentifier;
 
   @override
   ConsumerState<OtpVerificationScreen> createState() =>
@@ -117,8 +122,8 @@ class _OtpVerificationScreenState
   }
 
   String get _maskedDestination => widget.isPhone
-      ? _maskPhone(widget.username)
-      : _maskEmail(widget.username);
+      ? _maskPhone(widget.displayIdentifier)
+      : _maskEmail(widget.displayIdentifier);
 
   @override
   Widget build(BuildContext context) {
@@ -149,12 +154,26 @@ class _OtpVerificationScreenState
         );
         ref.read(otpNotifierProvider.notifier).reset();
       }
-      // OtpConfirmed: no navigation needed.
-      // authNotifierProvider → appInitProvider → SempreIoTApp rebuilds to MainScreen.
+    });
+
+    // Navigate to MainScreen once appInitProvider finishes (registerUser + MQTT).
+    // MaterialApp.home changes alone don't clear the Navigator stack, so we
+    // push MainScreen imperatively and remove all previous routes.
+    ref.listen(appInitProvider, (_, next) {
+      if (next.valueOrNull == true) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const MainScreen()),
+          (_) => false,
+        );
+      }
     });
 
     return Scaffold(
       backgroundColor: AppColors.backgroundDark,
+      // Prevent the scaffold from resizing when the keyboard appears.
+      // The scroll views handle keyboard insets manually to avoid the
+      // layout-jump shaking that occurs with the default resize behaviour on iOS.
+      resizeToAvoidBottomInset: false,
       body: LayoutBuilder(
         builder: (context, constraints) {
           if (constraints.maxWidth >= 900) {
@@ -243,7 +262,12 @@ class _MobileLayout extends StatelessWidget {
               ),
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  padding: EdgeInsets.fromLTRB(
+                    24,
+                    0,
+                    24,
+                    MediaQuery.viewInsetsOf(context).bottom + 24,
+                  ),
                   child: _OtpContent(
                     maskedDestination: maskedDestination,
                     isPhone: isPhone,
@@ -544,8 +568,15 @@ class _DigitBox extends StatelessWidget {
         focusNode: focusNode,
         enabled: enabled,
         maxLength: 1,
-        keyboardType: TextInputType.number,
+        // numberWithOptions avoids the iOS phone-plane keyboard layout
+        // that triggers UIKit constraint errors and screen shaking.
+        keyboardType: const TextInputType.numberWithOptions(
+          decimal: false,
+          signed: false,
+        ),
         textAlign: TextAlign.center,
+        autocorrect: false,
+        enableSuggestions: false,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         style: const TextStyle(
           color: AppColors.textPrimaryDark,

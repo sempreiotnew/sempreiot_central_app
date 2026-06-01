@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -23,6 +24,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _usePhone = false;
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
+  // Server-side field errors — shown under the relevant field without a snackbar.
+  String? _identifierServerError;
+  String? _passwordServerError;
 
   @override
   void dispose() {
@@ -35,13 +39,39 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   void _submit() {
     FocusScope.of(context).unfocus();
+    // Clear any previous server errors before revalidating.
+    setState(() {
+      _identifierServerError = null;
+      _passwordServerError = null;
+    });
     if (!_formKey.currentState!.validate()) return;
+    final identifier = _usePhone
+        ? _identifierCtrl.text.replaceAll(RegExp(r'[^\+\d]'), '')
+        : _identifierCtrl.text.trim();
     ref.read(registerNotifierProvider.notifier).signUp(
           name: _nameCtrl.text.trim(),
-          identifier: _identifierCtrl.text.trim(),
+          identifier: identifier,
           password: _passwordCtrl.text,
           isPhone: _usePhone,
         );
+  }
+
+  void _handleRegisterError(String raw) {
+    // Error format: "field:<field>:<message>" for field-level errors,
+    // plain string for general snackbar errors.
+    if (raw.startsWith('field:identifier:')) {
+      setState(() => _identifierServerError = raw.substring(17));
+    } else if (raw.startsWith('field:password:')) {
+      setState(() => _passwordServerError = raw.substring(15));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(raw),
+          backgroundColor: Colors.red.shade700,
+          duration: const Duration(seconds: 6),
+        ),
+      );
+    }
   }
 
   @override
@@ -58,25 +88,21 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               username: next.username,
               password: next.password,
               isPhone: next.isPhone,
+              displayIdentifier: next.displayIdentifier,
             ),
           ),
         );
       } else if (next is RegisterSuccess && !next.requiresConfirmation) {
         ref.read(registerNotifierProvider.notifier).reset();
       } else if (next is RegisterError) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(next.message),
-            backgroundColor: Colors.red.shade700,
-            duration: const Duration(seconds: 6),
-          ),
-        );
+        _handleRegisterError(next.message);
         ref.read(registerNotifierProvider.notifier).reset();
       }
     });
 
     return Scaffold(
       backgroundColor: AppColors.backgroundDark,
+      resizeToAvoidBottomInset: true,
       body: LayoutBuilder(
         builder: (context, constraints) {
           if (constraints.maxWidth >= 900) {
@@ -90,10 +116,23 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               obscurePassword: _obscurePassword,
               obscureConfirm: _obscureConfirm,
               isLoading: isLoading,
+              identifierServerError: _identifierServerError,
+              passwordServerError: _passwordServerError,
               onToggleIdentifierMode: () => setState(() {
                 _usePhone = !_usePhone;
                 _identifierCtrl.clear();
+                _identifierServerError = null;
               }),
+              onIdentifierChanged: (_) {
+                if (_identifierServerError != null) {
+                  setState(() => _identifierServerError = null);
+                }
+              },
+              onPasswordChanged: (_) {
+                if (_passwordServerError != null) {
+                  setState(() => _passwordServerError = null);
+                }
+              },
               onTogglePassword: () =>
                   setState(() => _obscurePassword = !_obscurePassword),
               onToggleConfirm: () =>
@@ -112,10 +151,23 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             obscurePassword: _obscurePassword,
             obscureConfirm: _obscureConfirm,
             isLoading: isLoading,
+            identifierServerError: _identifierServerError,
+            passwordServerError: _passwordServerError,
             onToggleIdentifierMode: () => setState(() {
               _usePhone = !_usePhone;
               _identifierCtrl.clear();
+              _identifierServerError = null;
             }),
+            onIdentifierChanged: (_) {
+              if (_identifierServerError != null) {
+                setState(() => _identifierServerError = null);
+              }
+            },
+            onPasswordChanged: (_) {
+              if (_passwordServerError != null) {
+                setState(() => _passwordServerError = null);
+              }
+            },
             onTogglePassword: () =>
                 setState(() => _obscurePassword = !_obscurePassword),
             onToggleConfirm: () =>
@@ -143,10 +195,14 @@ class _MobileLayout extends StatelessWidget {
     required this.obscureConfirm,
     required this.isLoading,
     required this.onToggleIdentifierMode,
+    required this.onIdentifierChanged,
+    required this.onPasswordChanged,
     required this.onTogglePassword,
     required this.onToggleConfirm,
     required this.onSubmit,
     required this.onLoginTap,
+    this.identifierServerError,
+    this.passwordServerError,
   });
 
   final GlobalKey<FormState> formKey;
@@ -158,7 +214,11 @@ class _MobileLayout extends StatelessWidget {
   final bool obscurePassword;
   final bool obscureConfirm;
   final bool isLoading;
+  final String? identifierServerError;
+  final String? passwordServerError;
   final VoidCallback onToggleIdentifierMode;
+  final void Function(String) onIdentifierChanged;
+  final void Function(String) onPasswordChanged;
   final VoidCallback onTogglePassword;
   final VoidCallback onToggleConfirm;
   final VoidCallback onSubmit;
@@ -166,6 +226,8 @@ class _MobileLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 50;
+
     return Stack(
       children: [
         const Positioned.fill(
@@ -183,59 +245,76 @@ class _MobileLayout extends StatelessWidget {
               ),
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  physics: const ClampingScrollPhysics(),
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const SizedBox(height: 24),
-                      Center(
-                        child: Image.asset(
-                          'assets/images/logo_no_shadow.png',
-                          width: 72,
-                          height: 72,
-                          fit: BoxFit.contain,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      const Center(
-                        child: Text(
-                          'Conectando alertas.\nProtegendo vidas.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w400,
-                            color: AppColors.textSecondaryDark,
-                            height: 1.55,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Center(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.secondary.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color:
-                                  AppColors.secondary.withValues(alpha: 0.3),
+                      // Hero section collapses when the keyboard is visible so
+                      // the form always has room and never causes overflow.
+                      AnimatedCrossFade(
+                        duration: const Duration(milliseconds: 180),
+                        crossFadeState: keyboardVisible
+                            ? CrossFadeState.showSecond
+                            : CrossFadeState.showFirst,
+                        firstChild: Column(
+                          children: [
+                            const SizedBox(height: 24),
+                            Center(
+                              child: Image.asset(
+                                'assets/images/logo_no_shadow.png',
+                                width: 72,
+                                height: 72,
+                                fit: BoxFit.contain,
+                              ),
                             ),
-                          ),
-                          child: const Text(
-                            'Sistema de Alarme de Incêndio',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.secondary,
-                              letterSpacing: 0.3,
+                            const SizedBox(height: 12),
+                            const Center(
+                              child: Text(
+                                'Conectando alertas.\nProtegendo vidas.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w400,
+                                  color: AppColors.textSecondaryDark,
+                                  height: 1.55,
+                                ),
+                              ),
                             ),
-                          ),
+                            const SizedBox(height: 12),
+                            Center(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.secondary
+                                      .withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: AppColors.secondary
+                                        .withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Sistema de Alarme de Incêndio',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.secondary,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 36),
+                          ],
                         ),
+                        secondChild: const SizedBox(height: 16),
                       ),
-                      const SizedBox(height: 36),
                       const Text(
                         'Criar conta',
                         style: AppTextStyles.displayLarge,
@@ -256,7 +335,11 @@ class _MobileLayout extends StatelessWidget {
                         obscurePassword: obscurePassword,
                         obscureConfirm: obscureConfirm,
                         isLoading: isLoading,
+                        identifierServerError: identifierServerError,
+                        passwordServerError: passwordServerError,
                         onToggleIdentifierMode: onToggleIdentifierMode,
+                        onIdentifierChanged: onIdentifierChanged,
+                        onPasswordChanged: onPasswordChanged,
                         onTogglePassword: onTogglePassword,
                         onToggleConfirm: onToggleConfirm,
                         onSubmit: onSubmit,
@@ -296,10 +379,14 @@ class _DesktopLayout extends StatelessWidget {
     required this.obscureConfirm,
     required this.isLoading,
     required this.onToggleIdentifierMode,
+    required this.onIdentifierChanged,
+    required this.onPasswordChanged,
     required this.onTogglePassword,
     required this.onToggleConfirm,
     required this.onSubmit,
     required this.onLoginTap,
+    this.identifierServerError,
+    this.passwordServerError,
   });
 
   final GlobalKey<FormState> formKey;
@@ -311,7 +398,11 @@ class _DesktopLayout extends StatelessWidget {
   final bool obscurePassword;
   final bool obscureConfirm;
   final bool isLoading;
+  final String? identifierServerError;
+  final String? passwordServerError;
   final VoidCallback onToggleIdentifierMode;
+  final void Function(String) onIdentifierChanged;
+  final void Function(String) onPasswordChanged;
   final VoidCallback onTogglePassword;
   final VoidCallback onToggleConfirm;
   final VoidCallback onSubmit;
@@ -365,7 +456,11 @@ class _DesktopLayout extends StatelessWidget {
                         obscurePassword: obscurePassword,
                         obscureConfirm: obscureConfirm,
                         isLoading: isLoading,
+                        identifierServerError: identifierServerError,
+                        passwordServerError: passwordServerError,
                         onToggleIdentifierMode: onToggleIdentifierMode,
+                        onIdentifierChanged: onIdentifierChanged,
+                        onPasswordChanged: onPasswordChanged,
                         onTogglePassword: onTogglePassword,
                         onToggleConfirm: onToggleConfirm,
                         onSubmit: onSubmit,
@@ -476,10 +571,14 @@ class _RegisterForm extends StatelessWidget {
     required this.obscureConfirm,
     required this.isLoading,
     required this.onToggleIdentifierMode,
+    required this.onIdentifierChanged,
+    required this.onPasswordChanged,
     required this.onTogglePassword,
     required this.onToggleConfirm,
     required this.onSubmit,
     required this.onLoginTap,
+    this.identifierServerError,
+    this.passwordServerError,
   });
 
   final GlobalKey<FormState> formKey;
@@ -491,7 +590,11 @@ class _RegisterForm extends StatelessWidget {
   final bool obscurePassword;
   final bool obscureConfirm;
   final bool isLoading;
+  final String? identifierServerError;
+  final String? passwordServerError;
   final VoidCallback onToggleIdentifierMode;
+  final void Function(String) onIdentifierChanged;
+  final void Function(String) onPasswordChanged;
   final VoidCallback onTogglePassword;
   final VoidCallback onToggleConfirm;
   final VoidCallback onSubmit;
@@ -507,7 +610,7 @@ class _RegisterForm extends StatelessWidget {
           _Field(
             controller: nameCtrl,
             label: 'Nome completo',
-            keyboardType: TextInputType.name,
+            keyboardType: TextInputType.text,
             textCapitalization: TextCapitalization.words,
             textInputAction: TextInputAction.next,
             validator: (v) {
@@ -537,15 +640,27 @@ class _RegisterForm extends StatelessWidget {
           _Field(
             controller: identifierCtrl,
             label: usePhone ? 'Telefone (ex: +5511999998888)' : 'E-mail',
-            keyboardType:
-                usePhone ? TextInputType.phone : TextInputType.emailAddress,
+            // Keep keyboard type consistent across all fields (text) so iOS
+            // doesn't dismiss and re-show the keyboard when focus moves between
+            // fields with different keyboard types.
+            keyboardType: TextInputType.text,
             textInputAction: TextInputAction.next,
+            autocorrect: false,
+            enableSuggestions: !usePhone,
+            inputFormatters: usePhone
+                ? [FilteringTextInputFormatter.allow(RegExp(r'[+\d]'))]
+                : null,
+            serverError: identifierServerError,
+            onChanged: onIdentifierChanged,
             validator: usePhone
                 ? (v) {
                     if (v == null || v.trim().isEmpty) {
                       return 'Informe seu telefone';
                     }
-                    if (!RegExp(r'^\+[1-9]\d{7,14}$').hasMatch(v.trim())) {
+                    final normalized =
+                        v.trim().replaceAll(RegExp(r'[^\+\d]'), '');
+                    // Simplified E.164 check: + followed by 8–15 digits
+                    if (!RegExp(r'^\+\d{8,15}$').hasMatch(normalized)) {
                       return 'Use o formato internacional: +5511999998888';
                     }
                     return null;
@@ -565,8 +680,11 @@ class _RegisterForm extends StatelessWidget {
           _Field(
             controller: passwordCtrl,
             label: 'Senha',
+            keyboardType: TextInputType.text,
             obscureText: obscurePassword,
             textInputAction: TextInputAction.next,
+            serverError: passwordServerError,
+            onChanged: onPasswordChanged,
             suffix: _VisibilityToggle(
               obscure: obscurePassword,
               onToggle: onTogglePassword,
@@ -587,6 +705,7 @@ class _RegisterForm extends StatelessWidget {
           _Field(
             controller: confirmCtrl,
             label: 'Confirmar senha',
+            keyboardType: TextInputType.text,
             obscureText: obscureConfirm,
             textInputAction: TextInputAction.done,
             onFieldSubmitted: (_) => onSubmit(),
@@ -666,7 +785,12 @@ class _Field extends StatelessWidget {
     this.textCapitalization = TextCapitalization.none,
     this.textInputAction,
     this.obscureText = false,
+    this.autocorrect = true,
+    this.enableSuggestions = true,
+    this.inputFormatters,
+    this.serverError,
     this.suffix,
+    this.onChanged,
     this.onFieldSubmitted,
   });
 
@@ -677,7 +801,13 @@ class _Field extends StatelessWidget {
   final TextCapitalization textCapitalization;
   final TextInputAction? textInputAction;
   final bool obscureText;
+  final bool autocorrect;
+  final bool enableSuggestions;
+  final List<TextInputFormatter>? inputFormatters;
+  /// Error text from a server response — shown under the field directly.
+  final String? serverError;
   final Widget? suffix;
+  final void Function(String)? onChanged;
   final void Function(String)? onFieldSubmitted;
 
   static InputBorder _border(Color color, {double width = 1.0}) =>
@@ -694,13 +824,22 @@ class _Field extends StatelessWidget {
       keyboardType: keyboardType,
       textCapitalization: textCapitalization,
       textInputAction: textInputAction,
+      autocorrect: autocorrect,
+      enableSuggestions: enableSuggestions,
+      inputFormatters: inputFormatters,
+      onChanged: onChanged,
       onFieldSubmitted: onFieldSubmitted,
       style: const TextStyle(
         color: AppColors.textPrimaryDark,
         fontSize: 15,
         fontWeight: FontWeight.w400,
       ),
-      validator: validator,
+      // When a server error is set it takes precedence over the validator.
+      // It is cleared as soon as the user edits the field (via onChanged).
+      validator: serverError != null ? (_) => serverError : validator,
+      autovalidateMode: serverError != null
+          ? AutovalidateMode.always
+          : AutovalidateMode.disabled,
       decoration: InputDecoration(
         labelText: label,
         labelStyle: const TextStyle(

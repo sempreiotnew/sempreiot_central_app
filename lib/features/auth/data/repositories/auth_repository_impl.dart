@@ -65,18 +65,24 @@ final class AuthRepositoryImpl implements IAuthRepository {
     final attrs = <AuthUserAttributeKey, String>{
       AuthUserAttributeKey.name: name,
     };
+    // Cognito requires the username to be an email. For phone users we derive
+    // a synthetic email from the digits so it's reproducible across sign-in.
+    final String username;
     if (isPhone) {
       attrs[AuthUserAttributeKey.phoneNumber] = identifier;
+      final digits = identifier.replaceAll(RegExp(r'[^\d]'), '');
+      username = '$digits@phone.sempreiot';
     } else {
       attrs[AuthUserAttributeKey.email] = identifier;
+      username = identifier;
     }
     final result = await Amplify.Auth.signUp(
-      username: identifier,
+      username: username,
       password: password,
       options: SignUpOptions(userAttributes: attrs),
     );
     return AuthSignUpResult(
-      username: identifier,
+      username: username,
       isComplete: result.isSignUpComplete,
     );
   }

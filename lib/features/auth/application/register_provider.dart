@@ -21,11 +21,14 @@ final class RegisterSuccess extends RegisterState {
     required this.password,
     required this.isPhone,
     required this.requiresConfirmation,
+    required this.displayIdentifier,
   });
   final String username;
   final String password;
   final bool isPhone;
   final bool requiresConfirmation;
+  /// Original email or phone (e.g. +5511999998888) — for display only.
+  final String displayIdentifier;
 }
 
 final class RegisterError extends RegisterState {
@@ -61,28 +64,33 @@ class RegisterNotifier extends Notifier<RegisterState> {
         password: password,
         isPhone: isPhone,
         requiresConfirmation: !result.isComplete,
+        displayIdentifier: identifier,
       );
     } catch (e) {
-      state = RegisterError(_formatError(e));
+      state = RegisterError(_formatError(e, isPhone: isPhone));
     }
   }
 
   void reset() => state = const RegisterIdle();
 
-  String _formatError(Object e) {
+  String _formatError(Object e, {bool isPhone = false}) {
     final msg = e.toString();
     if (msg.contains('UsernameExistsException')) {
-      return 'Já existe uma conta com esse identificador.';
+      return isPhone
+          ? 'field:identifier:Este número já está cadastrado.'
+          : 'field:identifier:Este e-mail já está cadastrado.';
     }
     if (msg.contains('InvalidPasswordException')) {
-      return 'Senha inválida. Use ao menos 8 caracteres com letras e números.';
+      return 'field:password:Senha inválida. Use ao menos 8 caracteres com letras e números.';
     }
     if (msg.contains('InvalidParameterException')) {
-      return 'Verifique os dados informados e tente novamente.';
+      return isPhone
+          ? 'field:identifier:Telefone inválido. Use o formato: +5511999998888'
+          : 'field:identifier:Verifique o e-mail informado.';
     }
     if (msg.contains('InvalidSmsRoleTrustRelationship') ||
         msg.contains('SNSSandbox')) {
-      return 'Envio de SMS indisponível. Tente usar e-mail.';
+      return 'field:identifier:Envio de SMS indisponível. Tente usar e-mail.';
     }
     return 'Erro ao criar conta. Tente novamente.';
   }
