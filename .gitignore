@@ -1,5 +1,5 @@
 .env
-
+.env.copy
 # Miscellaneous
 *.class
 *.log

@@ -75,7 +75,8 @@ class RegisterNotifier extends Notifier<RegisterState> {
 
   String _formatError(Object e, {bool isPhone = false}) {
     final msg = e.toString();
-    if (msg.contains('UsernameExistsException')) {
+    if (msg.contains('UsernameExistsException') ||
+        msg.contains('AliasExistsException')) {
       return isPhone
           ? 'field:identifier:Este número já está cadastrado.'
           : 'field:identifier:Este e-mail já está cadastrado.';

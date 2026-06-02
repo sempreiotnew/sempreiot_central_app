@@ -76,15 +76,29 @@ final class AuthRepositoryImpl implements IAuthRepository {
       attrs[AuthUserAttributeKey.email] = identifier;
       username = identifier;
     }
-    final result = await Amplify.Auth.signUp(
-      username: username,
-      password: password,
-      options: SignUpOptions(userAttributes: attrs),
-    );
-    return AuthSignUpResult(
-      username: username,
-      isComplete: result.isSignUpComplete,
-    );
+    try {
+      final result = await Amplify.Auth.signUp(
+        username: username,
+        password: password,
+        options: SignUpOptions(userAttributes: attrs),
+      );
+      return AuthSignUpResult(
+        username: username,
+        isComplete: result.isSignUpComplete,
+      );
+    } on UsernameExistsException catch (e) {
+      // Cognito creates the user in UNCONFIRMED state immediately on signUp.
+      // If they abandon before confirming, the next attempt hits this exception.
+      // Try resending the OTP — if it works the account is unconfirmed and we
+      // can resume the confirmation flow. If it fails the account is confirmed
+      // (real duplicate) and we surface the original error.
+      try {
+        await Amplify.Auth.resendSignUpCode(username: username);
+        return AuthSignUpResult(username: username, isComplete: false);
+      } catch (_) {
+        throw e;
+      }
+    }
   }
 
   @override
