@@ -5,10 +5,12 @@ import 'package:sempreiot_central_app/presentation/widgets/iot_network_animation
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../features/app/application/app_init_provider.dart';
 import '../../../features/auth/application/auth_provider.dart';
-import 'register_screen.dart';
-
+import '../main/main_screen.dart';
+import '../splash/splash_screen.dart';
 import 'login_modal.dart';
+import 'register_screen.dart';
 
 void _showSempreIoTLoginModal(BuildContext context) {
   showModalBottomSheet(
@@ -26,8 +28,16 @@ class LoginScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authNotifierProvider);
     final isLoading = authState.isLoading;
+    final appInitState = ref.watch(appInitProvider);
 
-    ref.listen(authNotifierProvider, (_, next) {
+    // Show the loading overlay during both phases:
+    //   1. Auth in progress (authState.isLoading)
+    //   2. Post-auth app initialisation (UserApiService + MQTT) while the user
+    //      is authenticated but appInitProvider hasn't returned true yet.
+    final isAnyLoading =
+        isLoading || (appInitState.isLoading && authState.valueOrNull != null);
+
+    ref.listen(authNotifierProvider, (prev, next) {
       if (next.hasError) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -35,6 +45,32 @@ class LoginScreen extends ConsumerWidget {
             backgroundColor: Colors.red.shade700,
             duration: const Duration(seconds: 6),
           ),
+        );
+      }
+      // When auth just succeeded (OAuth / WebUI flow): push SplashScreen so
+      // the user sees the animated splash while UserApiService + MQTT initialise.
+      // Only do this when no other route is on top (e.g. the login modal is not
+      // open), otherwise the modal handles its own dismissal.
+      if (prev?.isLoading == true &&
+          !next.isLoading &&
+          next.hasValue &&
+          next.value != null &&
+          !Navigator.of(context).canPop()) {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const SplashScreen()),
+        );
+      }
+    });
+
+    // Navigate to MainScreen as soon as appInitProvider finishes.
+    // This works regardless of whether the Navigator currently holds the live
+    // '/' route (fresh install) or a fixed route created by pushAndRemoveUntil
+    // (e.g. after a sign-out from MainScreen).
+    ref.listen(appInitProvider, (_, next) {
+      if (next.valueOrNull == true) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const MainScreen()),
+          (_) => false,
         );
       }
     });
@@ -113,7 +149,7 @@ class LoginScreen extends ConsumerWidget {
               ),
             ),
           ),
-          if (isLoading)
+          if (isAnyLoading)
             const Positioned.fill(
               child: ColoredBox(
                 color: Colors.black45,

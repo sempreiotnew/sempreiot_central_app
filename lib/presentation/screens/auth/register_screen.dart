@@ -613,6 +613,8 @@ class _RegisterForm extends StatelessWidget {
             keyboardType: TextInputType.text,
             textCapitalization: TextCapitalization.words,
             textInputAction: TextInputAction.next,
+            autocorrect: false,
+            enableSuggestions: false,
             validator: (v) {
               if (v == null || v.trim().isEmpty) return 'Informe seu nome';
               if (v.trim().length < 2) return 'Nome muito curto';
@@ -646,7 +648,7 @@ class _RegisterForm extends StatelessWidget {
             keyboardType: TextInputType.text,
             textInputAction: TextInputAction.next,
             autocorrect: false,
-            enableSuggestions: !usePhone,
+            enableSuggestions: false,
             inputFormatters: usePhone
                 ? [FilteringTextInputFormatter.allow(RegExp(r'[+\d]'))]
                 : null,
@@ -681,6 +683,8 @@ class _RegisterForm extends StatelessWidget {
             controller: passwordCtrl,
             label: 'Senha',
             keyboardType: TextInputType.text,
+            autocorrect: false,
+            enableSuggestions: false,
             obscureText: obscurePassword,
             textInputAction: TextInputAction.next,
             serverError: passwordServerError,
@@ -706,6 +710,8 @@ class _RegisterForm extends StatelessWidget {
             controller: confirmCtrl,
             label: 'Confirmar senha',
             keyboardType: TextInputType.text,
+            autocorrect: false,
+            enableSuggestions: false,
             obscureText: obscureConfirm,
             textInputAction: TextInputAction.done,
             onFieldSubmitted: (_) => onSubmit(),

@@ -4,7 +4,9 @@
       "Bash(flutter analyze *)",
       "Bash(flutter pub *)",
       "Bash(dart analyze *)",
-      "Bash(xargs cat)"
+      "Bash(xargs cat)",
+      "Bash(xargs cat -n)",
+      "Bash(xargs -I{} sh -c 'echo \"=== {} ===\" && cat -n {}')"
     ]
   }
 }
