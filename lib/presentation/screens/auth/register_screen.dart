@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../features/auth/application/register_provider.dart';
+import '../../widgets/auth_form_widgets.dart';
 import '../../widgets/iot_network_animation.dart';
 import 'otp_verification_screen.dart';
 
@@ -240,7 +241,7 @@ class _MobileLayout extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: _BackButton(onTap: onLoginTap),
+                  child: AuthBackButton(onTap: onLoginTap),
                 ),
               ),
               Expanded(
@@ -426,7 +427,7 @@ class _DesktopLayout extends StatelessWidget {
                       const SizedBox(height: 24),
                       Align(
                         alignment: Alignment.centerLeft,
-                        child: _BackButton(onTap: onLoginTap),
+                        child: AuthBackButton(onTap: onLoginTap),
                       ),
                       const SizedBox(height: 40),
                       Image.asset(
@@ -607,7 +608,7 @@ class _RegisterForm extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _Field(
+          AuthField(
             controller: nameCtrl,
             label: 'Nome completo',
             keyboardType: TextInputType.text,
@@ -625,13 +626,13 @@ class _RegisterForm extends StatelessWidget {
           // Identifier type toggle
           Row(
             children: [
-              _ToggleChip(
+              AuthToggleChip(
                 label: 'E-mail',
                 selected: !usePhone,
                 onTap: usePhone ? onToggleIdentifierMode : null,
               ),
               const SizedBox(width: 8),
-              _ToggleChip(
+              AuthToggleChip(
                 label: 'Telefone',
                 selected: usePhone,
                 onTap: !usePhone ? onToggleIdentifierMode : null,
@@ -639,7 +640,7 @@ class _RegisterForm extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          _Field(
+          AuthField(
             controller: identifierCtrl,
             label: usePhone ? 'Telefone (ex: +5511999998888)' : 'E-mail',
             // Keep keyboard type consistent across all fields (text) so iOS
@@ -679,7 +680,7 @@ class _RegisterForm extends StatelessWidget {
                   },
           ),
           const SizedBox(height: 12),
-          _Field(
+          AuthField(
             controller: passwordCtrl,
             label: 'Senha',
             keyboardType: TextInputType.text,
@@ -689,7 +690,7 @@ class _RegisterForm extends StatelessWidget {
             textInputAction: TextInputAction.next,
             serverError: passwordServerError,
             onChanged: onPasswordChanged,
-            suffix: _VisibilityToggle(
+            suffix: AuthVisibilityToggle(
               obscure: obscurePassword,
               onToggle: onTogglePassword,
             ),
@@ -706,7 +707,7 @@ class _RegisterForm extends StatelessWidget {
             },
           ),
           const SizedBox(height: 12),
-          _Field(
+          AuthField(
             controller: confirmCtrl,
             label: 'Confirmar senha',
             keyboardType: TextInputType.text,
@@ -715,7 +716,7 @@ class _RegisterForm extends StatelessWidget {
             obscureText: obscureConfirm,
             textInputAction: TextInputAction.done,
             onFieldSubmitted: (_) => onSubmit(),
-            suffix: _VisibilityToggle(
+            suffix: AuthVisibilityToggle(
               obscure: obscureConfirm,
               onToggle: onToggleConfirm,
             ),
@@ -726,7 +727,7 @@ class _RegisterForm extends StatelessWidget {
             },
           ),
           const SizedBox(height: 28),
-          _SubmitButton(isLoading: isLoading, onPressed: onSubmit),
+          AuthSubmitButton(label: 'Criar conta', isLoading: isLoading, onPressed: onSubmit),
           const SizedBox(height: 20),
           _LoginLink(onTap: onLoginTap),
         ],
@@ -735,198 +736,9 @@ class _RegisterForm extends StatelessWidget {
   }
 }
 
-// ── Form widgets ───────────────────────────────────────────────────────────
-
-class _ToggleChip extends StatelessWidget {
-  const _ToggleChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.secondary.withValues(alpha: 0.15)
-              : AppColors.surfaceDark,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: selected
-                ? AppColors.secondary.withValues(alpha: 0.6)
-                : AppColors.divider,
-            width: selected ? 1.5 : 1.0,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-            color: selected
-                ? AppColors.secondary
-                : AppColors.textSecondaryDark,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Field extends StatelessWidget {
-  const _Field({
-    required this.controller,
-    required this.label,
-    required this.validator,
-    this.keyboardType,
-    this.textCapitalization = TextCapitalization.none,
-    this.textInputAction,
-    this.obscureText = false,
-    this.autocorrect = true,
-    this.enableSuggestions = true,
-    this.inputFormatters,
-    this.serverError,
-    this.suffix,
-    this.onChanged,
-    this.onFieldSubmitted,
-  });
-
-  final TextEditingController controller;
-  final String label;
-  final String? Function(String?) validator;
-  final TextInputType? keyboardType;
-  final TextCapitalization textCapitalization;
-  final TextInputAction? textInputAction;
-  final bool obscureText;
-  final bool autocorrect;
-  final bool enableSuggestions;
-  final List<TextInputFormatter>? inputFormatters;
-  /// Error text from a server response — shown under the field directly.
-  final String? serverError;
-  final Widget? suffix;
-  final void Function(String)? onChanged;
-  final void Function(String)? onFieldSubmitted;
-
-  static InputBorder _border(Color color, {double width = 1.0}) =>
-      OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: color, width: width),
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    return TextFormField(
-      controller: controller,
-      obscureText: obscureText,
-      keyboardType: keyboardType,
-      textCapitalization: textCapitalization,
-      textInputAction: textInputAction,
-      autocorrect: autocorrect,
-      enableSuggestions: enableSuggestions,
-      inputFormatters: inputFormatters,
-      onChanged: onChanged,
-      onFieldSubmitted: onFieldSubmitted,
-      style: const TextStyle(
-        color: AppColors.textPrimaryDark,
-        fontSize: 15,
-        fontWeight: FontWeight.w400,
-      ),
-      // When a server error is set it takes precedence over the validator.
-      // It is cleared as soon as the user edits the field (via onChanged).
-      validator: serverError != null ? (_) => serverError : validator,
-      autovalidateMode: serverError != null
-          ? AutovalidateMode.always
-          : AutovalidateMode.disabled,
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(
-          color: AppColors.textSecondaryDark,
-          fontSize: 14,
-        ),
-        filled: true,
-        fillColor: AppColors.surfaceDark,
-        suffixIcon: suffix,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-        border: _border(AppColors.divider),
-        enabledBorder: _border(AppColors.divider),
-        focusedBorder: _border(AppColors.secondary, width: 1.5),
-        errorBorder: _border(Colors.red.shade400),
-        focusedErrorBorder: _border(Colors.red.shade400, width: 1.5),
-        errorStyle: TextStyle(color: Colors.red.shade400, fontSize: 12),
-      ),
-    );
-  }
-}
-
-class _VisibilityToggle extends StatelessWidget {
-  const _VisibilityToggle({required this.obscure, required this.onToggle});
-
-  final bool obscure;
-  final VoidCallback onToggle;
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      onPressed: onToggle,
-      icon: Icon(
-        obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-        color: AppColors.textSecondaryDark,
-        size: 20,
-      ),
-    );
-  }
-}
-
-class _SubmitButton extends StatelessWidget {
-  const _SubmitButton({required this.isLoading, required this.onPressed});
-
-  final bool isLoading;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 56,
-      child: FilledButton(
-        onPressed: isLoading ? null : onPressed,
-        style: FilledButton.styleFrom(
-          backgroundColor: AppColors.secondary,
-          disabledBackgroundColor: AppColors.secondary.withValues(alpha: 0.5),
-          foregroundColor: AppColors.backgroundDark,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        child: isLoading
-            ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  color: AppColors.backgroundDark,
-                ),
-              )
-            : const Text(
-                'Criar conta',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-      ),
-    );
-  }
-}
+// Shared form widgets (AuthField, AuthToggleChip, AuthVisibilityToggle,
+// AuthSubmitButton, AuthBackButton) live in
+// presentation/widgets/auth_form_widgets.dart.
 
 class _LoginLink extends StatelessWidget {
   const _LoginLink({required this.onTap});
@@ -945,32 +757,6 @@ class _LoginLink extends StatelessWidget {
         child: const Text(
           'Já tem uma conta? Entrar',
           style: AppTextStyles.link,
-        ),
-      ),
-    );
-  }
-}
-
-class _BackButton extends StatelessWidget {
-  const _BackButton({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      onPressed: onTap,
-      tooltip: 'Voltar',
-      icon: const Icon(
-        Icons.chevron_left_rounded,
-        color: AppColors.textPrimaryDark,
-        size: 22,
-      ),
-      style: IconButton.styleFrom(
-        backgroundColor: AppColors.surfaceDark,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: const BorderSide(color: AppColors.divider),
         ),
       ),
     );

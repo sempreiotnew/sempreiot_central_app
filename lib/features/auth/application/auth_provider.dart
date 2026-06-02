@@ -63,6 +63,31 @@ class AuthNotifier extends AsyncNotifier<AuthUserEntity?> {
             ),
       );
 
+  // Unlike _signIn this rethrows so callers (e.g. LoginNotifier) can map
+  // errors to field-level messages before updating their own state.
+  Future<void> signInWithIdentifier({
+    required String identifier,
+    required String password,
+    required bool isPhone,
+  }) async {
+    state = const AsyncLoading();
+    try {
+      await ref.read(authRepositoryProvider).signInWithIdentifier(
+            identifier: identifier,
+            password: password,
+            isPhone: isPhone,
+          );
+      final user = await ref.read(authRepositoryProvider).getCurrentUser();
+      state = AsyncData(user);
+      if (user != null) _startRefreshTimer();
+    } on UserCancelledException {
+      state = const AsyncData(null);
+    } catch (e, st) {
+      state = AsyncError(e, st);
+      rethrow;
+    }
+  }
+
   Future<void> signOut() async {
     state = const AsyncLoading();
     await ref.read(authRepositoryProvider).signOut();

@@ -56,6 +56,22 @@ final class AuthRepositoryImpl implements IAuthRepository {
   }
 
   @override
+  Future<void> signInWithIdentifier({
+    required String identifier,
+    required String password,
+    required bool isPhone,
+  }) async {
+    final String username;
+    if (isPhone) {
+      final digits = identifier.replaceAll(RegExp(r'[^\d]'), '');
+      username = '$digits@phone.sempreiot';
+    } else {
+      username = identifier;
+    }
+    await Amplify.Auth.signIn(username: username, password: password);
+  }
+
+  @override
   Future<AuthSignUpResult> signUp({
     required String name,
     required String identifier,

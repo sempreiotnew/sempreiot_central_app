@@ -17,7 +17,11 @@ void _showSempreIoTLoginModal(BuildContext context) {
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => const SempreIoTLoginModal(),
+    builder: (_) => SempreIoTLoginModal(
+      onCreateAccount: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const RegisterScreen()),
+      ),
+    ),
   );
 }
 

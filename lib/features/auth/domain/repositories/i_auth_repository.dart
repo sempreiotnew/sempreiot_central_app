@@ -11,6 +11,12 @@ abstract interface class IAuthRepository {
     required String password,
   });
 
+  Future<void> signInWithIdentifier({
+    required String identifier,
+    required String password,
+    required bool isPhone,
+  });
+
   Future<AuthSignUpResult> signUp({
     required String name,
     required String identifier,
