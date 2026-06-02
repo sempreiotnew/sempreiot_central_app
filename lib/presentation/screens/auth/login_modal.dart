@@ -6,6 +6,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../features/auth/application/login_provider.dart';
 import '../../widgets/auth_form_widgets.dart';
+import '../splash/splash_screen.dart';
 
 class SempreIoTLoginModal extends ConsumerStatefulWidget {
   const SempreIoTLoginModal({super.key, this.onCreateAccount});
@@ -75,7 +76,14 @@ class _SempreIoTLoginModalState extends ConsumerState<SempreIoTLoginModal> {
     ref.listen(loginNotifierProvider, (_, next) {
       if (next is LoginSuccess) {
         ref.read(loginNotifierProvider.notifier).reset();
-        if (mounted) Navigator.of(context).pop();
+        if (!mounted) return;
+        // Remove every route (modal + LoginScreen) and push SplashScreen.
+        // SplashScreen itself watches appInitProvider and navigates to
+        // MainScreen when initialisation finishes.
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const SplashScreen()),
+          (_) => false,
+        );
       } else if (next is LoginError) {
         _handleError(next.message);
         ref.read(loginNotifierProvider.notifier).reset();

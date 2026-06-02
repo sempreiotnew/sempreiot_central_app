@@ -70,7 +70,7 @@ class AuthNotifier extends AsyncNotifier<AuthUserEntity?> {
     required String password,
     required bool isPhone,
   }) async {
-    state = const AsyncLoading();
+    // state = const AsyncLoading();
     try {
       await ref.read(authRepositoryProvider).signInWithIdentifier(
             identifier: identifier,

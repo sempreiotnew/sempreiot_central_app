@@ -1,15 +1,18 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../features/app/application/app_init_provider.dart';
+import '../main/main_screen.dart';
 
-class SplashScreen extends StatefulWidget {
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen>
+class _SplashScreenState extends ConsumerState<SplashScreen>
     with TickerProviderStateMixin {
   late final AnimationController _logoController;
   late final AnimationController _pulseController;
@@ -65,6 +68,19 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(appInitProvider, (_, next) {
+      if (next.valueOrNull != true) return;
+      // Use addPostFrameCallback so navigation fires after the current build
+      // frame, avoiding conflicts with in-progress widget rebuilds.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const MainScreen()),
+          (_) => false,
+        );
+      });
+    });
+
     return Scaffold(
       backgroundColor: AppColors.backgroundDark,
       body: Stack(
