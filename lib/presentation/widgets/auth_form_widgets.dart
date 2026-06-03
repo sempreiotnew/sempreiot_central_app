@@ -61,11 +61,10 @@ class AuthField extends StatelessWidget {
         fontSize: 15,
         fontWeight: FontWeight.w400,
       ),
-      validator: serverError != null ? (_) => serverError : validator,
-      autovalidateMode: serverError != null
-          ? AutovalidateMode.always
-          : AutovalidateMode.disabled,
+      validator: validator,
+      autovalidateMode: AutovalidateMode.disabled,
       decoration: InputDecoration(
+        errorText: serverError,
         labelText: label,
         labelStyle: const TextStyle(
           color: AppColors.textSecondaryDark,

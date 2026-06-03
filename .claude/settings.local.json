@@ -6,7 +6,8 @@
       "Bash(dart analyze *)",
       "Bash(xargs cat)",
       "Bash(xargs cat -n)",
-      "Bash(xargs -I{} sh -c 'echo \"=== {} ===\" && cat -n {}')"
+      "Bash(xargs -I{} sh -c 'echo \"=== {} ===\" && cat -n {}')",
+      "Bash(xargs ls -la)"
     ]
   }
 }
