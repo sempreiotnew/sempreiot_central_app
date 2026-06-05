@@ -53,6 +53,15 @@ class RegisterNotifier extends Notifier<RegisterState> {
   }) async {
     state = const RegisterLoading();
     try {
+      final check = await _repo.checkIdentifierExists(identifier, isPhone: isPhone);
+      if (check.exists && check.confirmed) {
+        state = RegisterError(isPhone
+            ? 'field:identifier:Este número já está cadastrado.'
+            : 'field:identifier:E-mail já cadastrado.');
+        return;
+      }
+      // exists && !confirmed → unconfirmed user: fall through to signUp(),
+      // which hits UsernameExistsException and resends the OTP automatically.
       final result = await _repo.signUp(
         name: name,
         identifier: identifier,

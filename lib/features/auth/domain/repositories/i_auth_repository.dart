@@ -32,4 +32,9 @@ abstract interface class IAuthRepository {
   Future<void> resendSignUpCode({
     required String username,
   });
+
+  Future<({bool exists, bool confirmed})> checkIdentifierExists(
+    String identifier, {
+    required bool isPhone,
+  });
 }

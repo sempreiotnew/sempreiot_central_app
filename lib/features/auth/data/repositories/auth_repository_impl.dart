@@ -1,5 +1,7 @@
 import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 import '../../domain/entities/auth_user_entity.dart';
 import '../../domain/entities/sign_up_result.dart' show AuthSignUpResult;
@@ -131,5 +133,29 @@ final class AuthRepositoryImpl implements IAuthRepository {
   @override
   Future<void> resendSignUpCode({required String username}) async {
     await Amplify.Auth.resendSignUpCode(username: username);
+  }
+
+  @override
+  Future<({bool exists, bool confirmed})> checkIdentifierExists(
+    String identifier, {
+    required bool isPhone,
+  }) async {
+    final String queryParam;
+    if (isPhone) {
+      final digits = identifier.replaceAll(RegExp(r'[^\d+]'), '');
+      final phone = digits.startsWith('+') ? digits : '+$digits';
+      queryParam = 'phone=${Uri.encodeComponent(phone)}';
+    } else {
+      queryParam = 'email=${Uri.encodeComponent(identifier)}';
+    }
+
+    final uri = Uri.parse('https://api.sempreiot.com/user/check-email?$queryParam');
+    final response = await http.get(uri);
+    if (response.statusCode != 200) return (exists: false, confirmed: false);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return (
+      exists: data['exists'] == true,
+      confirmed: data['confirmed'] == true,
+    );
   }
 }
