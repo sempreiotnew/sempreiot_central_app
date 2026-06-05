@@ -15,6 +15,12 @@ final authRepositoryProvider = Provider<IAuthRepository>(
 final authNotifierProvider =
     AsyncNotifierProvider<AuthNotifier, AuthUserEntity?>(AuthNotifier.new);
 
+class FederatedEmailConflictException implements Exception {
+  const FederatedEmailConflictException();
+  @override
+  String toString() => 'Este e-mail já possui uma conta. Faça login com e-mail e senha.';
+}
+
 class AuthNotifier extends AsyncNotifier<AuthUserEntity?> {
   @override
   Future<AuthUserEntity?> build() async {
@@ -44,11 +50,11 @@ class AuthNotifier extends AsyncNotifier<AuthUserEntity?> {
     ref.onDispose(timer.cancel);
   }
 
-  Future<void> signInWithGoogle() => _signIn(
+  Future<void> signInWithGoogle() => _signInFederated(
         () => ref.read(authRepositoryProvider).signInWithGoogle(),
       );
 
-  Future<void> signInWithApple() => _signIn(
+  Future<void> signInWithApple() => _signInFederated(
         () => ref.read(authRepositoryProvider).signInWithApple(),
       );
 
@@ -96,6 +102,29 @@ class AuthNotifier extends AsyncNotifier<AuthUserEntity?> {
     // has no redirect and requires this update to propagate to dependents
     // (IoT disconnect, appInitProvider, etc.).
     state = const AsyncData(null);
+  }
+
+  Future<void> _signInFederated(Future<void> Function() signInFn) async {
+    state = const AsyncLoading();
+    try {
+      await signInFn();
+      final repo = ref.read(authRepositoryProvider);
+      final email = await repo.getSignedInEmail();
+      if (email != null) {
+        final check = await repo.checkIdentifierExists(email, isPhone: false);
+        if (check.hasLocalUser) {
+          await repo.signOut();
+          throw const FederatedEmailConflictException();
+        }
+      }
+      final user = await repo.getCurrentUser();
+      state = AsyncData(user);
+      if (user != null) _startRefreshTimer();
+    } on UserCancelledException {
+      state = const AsyncData(null);
+    } catch (e, st) {
+      state = AsyncError(e, st);
+    }
   }
 
   Future<void> _signIn(Future<void> Function() signInFn) async {

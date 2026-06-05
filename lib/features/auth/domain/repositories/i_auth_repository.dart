@@ -33,8 +33,10 @@ abstract interface class IAuthRepository {
     required String username,
   });
 
-  Future<({bool exists, bool confirmed})> checkIdentifierExists(
+  Future<({bool exists, bool confirmed, bool hasLocalUser})> checkIdentifierExists(
     String identifier, {
     required bool isPhone,
   });
+
+  Future<String?> getSignedInEmail();
 }

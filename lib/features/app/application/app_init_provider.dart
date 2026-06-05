@@ -4,6 +4,8 @@ import '../../auth/application/auth_provider.dart';
 import '../../auth/data/services/user_api_service.dart';
 import '../../iot/application/iot_provider.dart';
 
+export '../../auth/application/auth_provider.dart' show FederatedEmailConflictException;
+
 /// Runs the full startup sequence once and returns true when the app is ready:
 ///   1. Wait for Cognito auth check
 ///   2. Sync user to the backend API
@@ -17,8 +19,14 @@ final appInitProvider = FutureProvider<bool>((ref) async {
 
   try {
     await UserApiService().registerUser();
+  } on UserApiException catch (e) {
+    await ref.read(authNotifierProvider.notifier).signOut();
+    if (e.statusCode == 409) {
+      throw const FederatedEmailConflictException();
+    }
+    return false;
   } catch (e) {
-    ref.read(authNotifierProvider.notifier).signOut();
+    await ref.read(authNotifierProvider.notifier).signOut();
     return false;
   }
 

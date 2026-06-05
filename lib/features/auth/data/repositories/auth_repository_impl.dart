@@ -136,7 +136,7 @@ final class AuthRepositoryImpl implements IAuthRepository {
   }
 
   @override
-  Future<({bool exists, bool confirmed})> checkIdentifierExists(
+  Future<({bool exists, bool confirmed, bool hasLocalUser})> checkIdentifierExists(
     String identifier, {
     required bool isPhone,
   }) async {
@@ -151,11 +151,25 @@ final class AuthRepositoryImpl implements IAuthRepository {
 
     final uri = Uri.parse('https://api.sempreiot.com/user/check-email?$queryParam');
     final response = await http.get(uri);
-    if (response.statusCode != 200) return (exists: false, confirmed: false);
+    if (response.statusCode != 200) {
+      return (exists: false, confirmed: false, hasLocalUser: false);
+    }
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     return (
       exists: data['exists'] == true,
       confirmed: data['confirmed'] == true,
+      hasLocalUser: data['hasLocalUser'] == true,
     );
+  }
+
+  @override
+  Future<String?> getSignedInEmail() async {
+    try {
+      final session = await Amplify.Auth.fetchAuthSession() as CognitoAuthSession;
+      final idToken = session.userPoolTokensResult.value.idToken;
+      return idToken.claims.customClaims['email'] as String?;
+    } catch (_) {
+      return null;
+    }
   }
 }
