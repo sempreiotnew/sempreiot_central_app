@@ -6,10 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
-import '../../../features/app/application/app_init_provider.dart';
 import '../../../features/auth/application/otp_provider.dart';
 import '../../widgets/iot_network_animation.dart';
-import '../main/main_screen.dart';
+import '../splash/splash_screen.dart';
 
 class OtpVerificationScreen extends ConsumerStatefulWidget {
   const OtpVerificationScreen({
@@ -131,6 +130,13 @@ class _OtpVerificationScreenState
     final isLoading = state is OtpLoading || state is OtpResending;
 
     ref.listen(otpNotifierProvider, (_, next) {
+      if (next is OtpConfirmed) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const SplashScreen()),
+          (_) => false,
+        );
+        return;
+      }
       if (next is OtpError) {
         for (final c in _digitControllers) {
           c.clear();
@@ -153,18 +159,6 @@ class _OtpVerificationScreenState
           ),
         );
         ref.read(otpNotifierProvider.notifier).reset();
-      }
-    });
-
-    // Navigate to MainScreen once appInitProvider finishes (registerUser + MQTT).
-    // MaterialApp.home changes alone don't clear the Navigator stack, so we
-    // push MainScreen imperatively and remove all previous routes.
-    ref.listen(appInitProvider, (_, next) {
-      if (next.valueOrNull == true) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const MainScreen()),
-          (_) => false,
-        );
       }
     });
 
