@@ -54,14 +54,33 @@ class RegisterNotifier extends Notifier<RegisterState> {
     state = const RegisterLoading();
     try {
       final check = await _repo.checkIdentifierExists(identifier, isPhone: isPhone);
+
       if (check.exists && check.confirmed) {
         state = RegisterError(isPhone
             ? 'field:identifier:Este número já está cadastrado.'
             : 'field:identifier:E-mail já cadastrado.');
         return;
       }
-      // exists && !confirmed → unconfirmed user: fall through to signUp(),
-      // which hits UsernameExistsException and resends the OTP automatically.
+
+      if (check.exists && !check.confirmed) {
+        // User registered but never confirmed. Skip signUp() — calling it again
+        // throws UsernameExistsException whose resendSignUpCode fallback inside
+        // the repository can silently fail (throttling, pool config, etc.) and
+        // re-surface as a misleading "already registered" error.
+        // Instead, resend the OTP directly and go straight to the OTP screen.
+        final username = _cognitoUsername(identifier, isPhone: isPhone);
+        await _repo.resendSignUpCode(username: username);
+        state = RegisterSuccess(
+          username: username,
+          password: password,
+          isPhone: isPhone,
+          requiresConfirmation: true,
+          displayIdentifier: identifier,
+        );
+        return;
+      }
+
+      // New user — proceed with normal sign-up.
       final result = await _repo.signUp(
         name: name,
         identifier: identifier,
@@ -80,10 +99,21 @@ class RegisterNotifier extends Notifier<RegisterState> {
     }
   }
 
+  /// Mirrors the username derivation in AuthRepositoryImpl.signUp().
+  String _cognitoUsername(String identifier, {required bool isPhone}) {
+    if (!isPhone) return identifier;
+    final digits = identifier.replaceAll(RegExp(r'[^\d]'), '');
+    return '$digits@phone.sempreiot';
+  }
+
   void reset() => state = const RegisterIdle();
 
   String _formatError(Object e, {bool isPhone = false}) {
     final msg = e.toString();
+    if (msg.contains('LimitExceededException') ||
+        msg.contains('TooManyRequestsException')) {
+      return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.';
+    }
     if (msg.contains('UsernameExistsException') ||
         msg.contains('AliasExistsException')) {
       return isPhone
