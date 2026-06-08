@@ -79,7 +79,14 @@ class AuthNotifier extends AsyncNotifier<AuthUserEntity?> {
       final user = await ref.read(authRepositoryProvider).getCurrentUser();
       state = AsyncData(user);
       if (user != null) _startRefreshTimer();
+    } on AuthDomainException {
+      // Expected login failures (wrong password, unconfirmed, rate limit, etc.)
+      // are handled by the calling provider (LoginNotifier). Don't surface them
+      // as AsyncError on the auth state — that would trigger the global error
+      // snackbar on the login screen with a raw type name.
+      rethrow;
     } catch (e, st) {
+      // Truly unexpected infrastructure error — surface it globally.
       state = AsyncError(e, st);
       rethrow;
     }

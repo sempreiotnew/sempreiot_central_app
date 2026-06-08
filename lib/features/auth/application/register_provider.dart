@@ -57,9 +57,17 @@ class RegisterNotifier extends Notifier<RegisterState> {
       final check = await _repo.checkIdentifierExists(identifier, isPhone: isPhone);
 
       if (check.exists && check.confirmed) {
-        state = RegisterError(isPhone
-            ? 'field:identifier:Este número já está cadastrado.'
-            : 'field:identifier:E-mail já cadastrado.');
+        // Distinguish between a confirmed local account and a federated-only
+        // account so the user knows how to proceed.
+        final String message;
+        if (isPhone) {
+          message = 'field:identifier:Este número já está cadastrado.';
+        } else if (check.hasLocalUser) {
+          message = 'field:identifier:E-mail já cadastrado.';
+        } else {
+          message = 'field:identifier:Este e-mail está vinculado a uma conta Google ou Apple. Faça login pela opção social.';
+        }
+        state = RegisterError(message);
         return;
       }
 

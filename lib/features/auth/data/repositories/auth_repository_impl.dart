@@ -87,12 +87,27 @@ final class AuthRepositoryImpl implements IAuthRepository {
 
   Future<void> _performSignIn(String username, String password) async {
     try {
-      await Amplify.Auth.signIn(username: username, password: password);
+      final result = await Amplify.Auth.signIn(username: username, password: password);
+      // Amplify v2 catches UserNotConfirmedException internally and returns a
+      // successful SignInResult with isSignedIn=false instead of rethrowing.
+      // We must check the result to detect this case.
+      if (!result.isSignedIn) {
+        switch (result.nextStep.signInStep) {
+          case AuthSignInStep.confirmSignUp:
+            throw const AccountNotConfirmedException();
+          case AuthSignInStep.resetPassword:
+          default:
+            throw const UnknownAuthException();
+        }
+      }
+    } on AuthDomainException {
+      rethrow;
     } on AuthNotAuthorizedException {
       throw const InvalidCredentialsException();
     } on UserNotFoundException {
       throw const InvalidCredentialsException();
     } on UserNotConfirmedException {
+      // Defensive catch — Amplify v2 rarely surfaces this but kept for safety.
       throw const AccountNotConfirmedException();
     } on InvalidParameterException {
       throw const InvalidIdentifierException();
@@ -137,7 +152,22 @@ final class AuthRepositoryImpl implements IAuthRepository {
         isComplete: result.isSignUpComplete,
       );
     } on UsernameExistsException {
-      throw const IdentifierAlreadyConfirmedException();
+      // The app's check-email Lambda queries the user DB, which is only
+      // populated by handleRegisterUser after confirmation. An unconfirmed
+      // user won't be in that DB, so the Lambda returns exists=false and
+      // register_provider falls through to signUp(). Try resending the OTP —
+      // if it works the user is unconfirmed and can resume the flow. If it
+      // fails (rate-limited, already confirmed) surface the appropriate error.
+      try {
+        await Amplify.Auth.resendSignUpCode(username: username);
+        return AuthSignUpResult(username: username, isComplete: false);
+      } on LimitExceededException {
+        throw const AuthRateLimitException();
+      } on TooManyRequestsException {
+        throw const AuthRateLimitException();
+      } catch (_) {
+        throw const IdentifierAlreadyConfirmedException();
+      }
     } on AliasExistsException {
       throw const IdentifierAlreadyConfirmedException();
     } on InvalidPasswordException {
