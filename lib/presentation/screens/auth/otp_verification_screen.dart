@@ -32,9 +32,10 @@ class OtpVerificationScreen extends ConsumerStatefulWidget {
 
 class _OtpVerificationScreenState
     extends ConsumerState<OtpVerificationScreen> {
-  final List<TextEditingController> _digitControllers =
-      List.generate(6, (_) => TextEditingController());
-  final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
+  // Single controller + focus node: avoids rapid focus-shifting that triggers
+  // iOS UIKit keyboard constraint conflicts and blocks typing/paste.
+  final TextEditingController _otpController = TextEditingController();
+  final FocusNode _otpFocusNode = FocusNode();
 
   late Timer _resendTimer;
   int _secondsRemaining = 60;
@@ -45,7 +46,7 @@ class _OtpVerificationScreenState
     super.initState();
     _startCountdown();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusNodes.first.requestFocus();
+      _otpFocusNode.requestFocus();
     });
   }
 
@@ -67,29 +68,17 @@ class _OtpVerificationScreenState
   @override
   void dispose() {
     _resendTimer.cancel();
-    for (final c in _digitControllers) {
-      c.dispose();
-    }
-    for (final f in _focusNodes) {
-      f.dispose();
-    }
+    _otpController.dispose();
+    _otpFocusNode.dispose();
     super.dispose();
   }
 
-  void _onDigitChanged(int index, String value) {
-    if (value.isEmpty && index > 0) {
-      _focusNodes[index - 1].requestFocus();
-      return;
-    }
-    if (value.length == 1 && index < 5) {
-      _focusNodes[index + 1].requestFocus();
-    }
-    final code = _digitControllers.map((c) => c.text).join();
-    if (code.length == 6) _submit();
+  void _onOtpChanged(String value) {
+    if (value.length == 6) _submit();
   }
 
   void _submit() {
-    final code = _digitControllers.map((c) => c.text).join();
+    final code = _otpController.text;
     if (code.length < 6) return;
     ref.read(otpNotifierProvider.notifier).confirm(
           username: widget.username,
@@ -138,10 +127,8 @@ class _OtpVerificationScreenState
         return;
       }
       if (next is OtpError) {
-        for (final c in _digitControllers) {
-          c.clear();
-        }
-        _focusNodes.first.requestFocus();
+        _otpController.clear();
+        _otpFocusNode.requestFocus();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(next.message),
@@ -174,12 +161,12 @@ class _OtpVerificationScreenState
             return _DesktopLayout(
               maskedDestination: _maskedDestination,
               isPhone: widget.isPhone,
-              digitControllers: _digitControllers,
-              focusNodes: _focusNodes,
+              otpController: _otpController,
+              otpFocusNode: _otpFocusNode,
               secondsRemaining: _secondsRemaining,
               canResend: _canResend,
               isLoading: isLoading,
-              onDigitChanged: _onDigitChanged,
+              onOtpChanged: _onOtpChanged,
               onSubmit: _submit,
               onResend: _resend,
               onBack: () => Navigator.of(context).pop(),
@@ -189,12 +176,12 @@ class _OtpVerificationScreenState
           return _MobileLayout(
             maskedDestination: _maskedDestination,
             isPhone: widget.isPhone,
-            digitControllers: _digitControllers,
-            focusNodes: _focusNodes,
+            otpController: _otpController,
+            otpFocusNode: _otpFocusNode,
             secondsRemaining: _secondsRemaining,
             canResend: _canResend,
             isLoading: isLoading,
-            onDigitChanged: _onDigitChanged,
+            onOtpChanged: _onOtpChanged,
             onSubmit: _submit,
             onResend: _resend,
             onBack: () => Navigator.of(context).pop(),
@@ -212,13 +199,13 @@ class _MobileLayout extends StatelessWidget {
   const _MobileLayout({
     required this.maskedDestination,
     required this.isPhone,
-    required this.digitControllers,
-    required this.focusNodes,
+    required this.otpController,
+    required this.otpFocusNode,
     required this.secondsRemaining,
     required this.canResend,
     required this.isLoading,
     required this.isResending,
-    required this.onDigitChanged,
+    required this.onOtpChanged,
     required this.onSubmit,
     required this.onResend,
     required this.onBack,
@@ -226,13 +213,13 @@ class _MobileLayout extends StatelessWidget {
 
   final String maskedDestination;
   final bool isPhone;
-  final List<TextEditingController> digitControllers;
-  final List<FocusNode> focusNodes;
+  final TextEditingController otpController;
+  final FocusNode otpFocusNode;
   final int secondsRemaining;
   final bool canResend;
   final bool isLoading;
   final bool isResending;
-  final void Function(int, String) onDigitChanged;
+  final void Function(String) onOtpChanged;
   final VoidCallback onSubmit;
   final VoidCallback onResend;
   final VoidCallback onBack;
@@ -265,13 +252,13 @@ class _MobileLayout extends StatelessWidget {
                   child: _OtpContent(
                     maskedDestination: maskedDestination,
                     isPhone: isPhone,
-                    digitControllers: digitControllers,
-                    focusNodes: focusNodes,
+                    otpController: otpController,
+                    otpFocusNode: otpFocusNode,
                     secondsRemaining: secondsRemaining,
                     canResend: canResend,
                     isLoading: isLoading,
                     isResending: isResending,
-                    onDigitChanged: onDigitChanged,
+                    onOtpChanged: onOtpChanged,
                     onSubmit: onSubmit,
                     onResend: onResend,
                   ),
@@ -298,13 +285,13 @@ class _DesktopLayout extends StatelessWidget {
   const _DesktopLayout({
     required this.maskedDestination,
     required this.isPhone,
-    required this.digitControllers,
-    required this.focusNodes,
+    required this.otpController,
+    required this.otpFocusNode,
     required this.secondsRemaining,
     required this.canResend,
     required this.isLoading,
     required this.isResending,
-    required this.onDigitChanged,
+    required this.onOtpChanged,
     required this.onSubmit,
     required this.onResend,
     required this.onBack,
@@ -312,13 +299,13 @@ class _DesktopLayout extends StatelessWidget {
 
   final String maskedDestination;
   final bool isPhone;
-  final List<TextEditingController> digitControllers;
-  final List<FocusNode> focusNodes;
+  final TextEditingController otpController;
+  final FocusNode otpFocusNode;
   final int secondsRemaining;
   final bool canResend;
   final bool isLoading;
   final bool isResending;
-  final void Function(int, String) onDigitChanged;
+  final void Function(String) onOtpChanged;
   final VoidCallback onSubmit;
   final VoidCallback onResend;
   final VoidCallback onBack;
@@ -347,13 +334,13 @@ class _DesktopLayout extends StatelessWidget {
                       _OtpContent(
                         maskedDestination: maskedDestination,
                         isPhone: isPhone,
-                        digitControllers: digitControllers,
-                        focusNodes: focusNodes,
+                        otpController: otpController,
+                        otpFocusNode: otpFocusNode,
                         secondsRemaining: secondsRemaining,
                         canResend: canResend,
                         isLoading: isLoading,
                         isResending: isResending,
-                        onDigitChanged: onDigitChanged,
+                        onOtpChanged: onOtpChanged,
                         onSubmit: onSubmit,
                         onResend: onResend,
                       ),
@@ -384,26 +371,26 @@ class _OtpContent extends StatelessWidget {
   const _OtpContent({
     required this.maskedDestination,
     required this.isPhone,
-    required this.digitControllers,
-    required this.focusNodes,
+    required this.otpController,
+    required this.otpFocusNode,
     required this.secondsRemaining,
     required this.canResend,
     required this.isLoading,
     required this.isResending,
-    required this.onDigitChanged,
+    required this.onOtpChanged,
     required this.onSubmit,
     required this.onResend,
   });
 
   final String maskedDestination;
   final bool isPhone;
-  final List<TextEditingController> digitControllers;
-  final List<FocusNode> focusNodes;
+  final TextEditingController otpController;
+  final FocusNode otpFocusNode;
   final int secondsRemaining;
   final bool canResend;
   final bool isLoading;
   final bool isResending;
-  final void Function(int, String) onDigitChanged;
+  final void Function(String) onOtpChanged;
   final VoidCallback onSubmit;
   final VoidCallback onResend;
 
@@ -451,15 +438,12 @@ class _OtpContent extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 32),
-        // 6-digit input row
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: List.generate(6, (i) => _DigitBox(
-                controller: digitControllers[i],
-                focusNode: focusNodes[i],
-                enabled: !isLoading,
-                onChanged: (v) => onDigitChanged(i, v),
-              )),
+        // 6-digit input — single hidden field + 6 visual boxes
+        _OtpInputRow(
+          controller: otpController,
+          focusNode: otpFocusNode,
+          enabled: !isLoading,
+          onChanged: onOtpChanged,
         ),
         const SizedBox(height: 28),
         // Confirm button
@@ -533,8 +517,15 @@ class _OtpContent extends StatelessWidget {
   }
 }
 
-class _DigitBox extends StatelessWidget {
-  const _DigitBox({
+// ── OTP input: single invisible TextField overlaid by 6 visual boxes ────────
+//
+// StatelessWidget + AnimatedBuilder: the visual boxes are rebuilt reactively,
+// but the TextField sibling is NEVER rebuilt during typing. Rebuilding the
+// TextField re-sends keyboard config to iOS on every keystroke, causing the
+// keyboard to briefly dismiss/reopen and triggering UIKit constraint warnings.
+
+class _OtpInputRow extends StatelessWidget {
+  const _OtpInputRow({
     required this.controller,
     required this.focusNode,
     required this.enabled,
@@ -546,48 +537,119 @@ class _DigitBox extends StatelessWidget {
   final bool enabled;
   final void Function(String) onChanged;
 
-  static InputBorder _border(Color color, {double width = 1.0}) =>
-      OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: color, width: width),
-      );
+  @override
+  Widget build(BuildContext context) {
+    // Opacity(0) disables hit testing in Flutter, so the GestureDetector
+    // programmatically requests focus when the user taps the input area.
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        if (enabled) focusNode.requestFocus();
+      },
+      child: Stack(
+        children: [
+          // Visual digit boxes — AnimatedBuilder scopes rebuilds to this
+          // subtree only, leaving the TextField sibling untouched.
+          AnimatedBuilder(
+            animation: Listenable.merge([controller, focusNode]),
+            builder: (context, _) {
+              final text = controller.text;
+              final hasFocus = focusNode.hasFocus;
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: List.generate(6, (i) {
+                  final char = i < text.length ? text[i] : '';
+                  final isActive = hasFocus && i == text.length.clamp(0, 5);
+                  return _DigitBox(
+                    char: char,
+                    isActive: isActive,
+                    enabled: enabled,
+                  );
+                }),
+              );
+            },
+          ),
+          // Stable hidden TextField — owns the keyboard session.
+          // Positioned outside AnimatedBuilder so it is never recreated
+          // during typing. The ValueKey pins its element in the widget tree.
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0,
+              child: TextField(
+                key: const ValueKey('_otp_hidden'),
+                controller: controller,
+                focusNode: focusNode,
+                enabled: enabled,
+                maxLength: 6,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: false,
+                  signed: false,
+                ),
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                // Enables the "From Messages" OTP autofill suggestion on iOS.
+                autofillHints: const [AutofillHints.oneTimeCode],
+                textInputAction: TextInputAction.done,
+                // No-op prevents Flutter's default nextFocus() call on Enter,
+                // which would jump focus to the Confirm button.
+                onEditingComplete: () {},
+                autocorrect: false,
+                enableSuggestions: false,
+                onChanged: onChanged,
+                decoration: const InputDecoration(
+                  counterText: '',
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Visual digit box (display only) ────────────────────────────────────────
+
+class _DigitBox extends StatelessWidget {
+  const _DigitBox({
+    required this.char,
+    required this.isActive,
+    required this.enabled,
+  });
+
+  final String char;
+  final bool isActive;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    final borderColor = isActive
+        ? AppColors.secondary
+        : char.isNotEmpty
+            ? AppColors.secondary.withValues(alpha: 0.5)
+            : AppColors.divider;
+    final borderWidth = isActive ? 2.0 : 1.0;
+
+    return Container(
       width: 48,
       height: 60,
-      child: TextFormField(
-        controller: controller,
-        focusNode: focusNode,
-        enabled: enabled,
-        maxLength: 1,
-        // numberWithOptions avoids the iOS phone-plane keyboard layout
-        // that triggers UIKit constraint errors and screen shaking.
-        keyboardType: const TextInputType.numberWithOptions(
-          decimal: false,
-          signed: false,
-        ),
-        textAlign: TextAlign.center,
-        autocorrect: false,
-        enableSuggestions: false,
-        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        style: const TextStyle(
-          color: AppColors.textPrimaryDark,
+      decoration: BoxDecoration(
+        color: enabled
+            ? AppColors.surfaceDark
+            : AppColors.surfaceDark.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor, width: borderWidth),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        char,
+        style: TextStyle(
+          color: enabled
+              ? AppColors.textPrimaryDark
+              : AppColors.textPrimaryDark.withValues(alpha: 0.5),
           fontSize: 22,
           fontWeight: FontWeight.w700,
-        ),
-        onChanged: onChanged,
-        decoration: InputDecoration(
-          counterText: '',
-          filled: true,
-          fillColor: AppColors.surfaceDark,
-          contentPadding: EdgeInsets.zero,
-          border: _border(AppColors.divider),
-          enabledBorder: _border(AppColors.divider),
-          focusedBorder: _border(AppColors.secondary, width: 2),
-          disabledBorder: _border(AppColors.divider.withValues(alpha: 0.5)),
-          errorBorder: _border(Colors.red.shade400),
         ),
       ),
     );
