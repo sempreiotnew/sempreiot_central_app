@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'auth_provider.dart';
+import '../domain/exceptions/auth_exceptions.dart';
 import '../domain/repositories/i_auth_repository.dart';
 
 sealed class RegisterState {
@@ -94,8 +95,10 @@ class RegisterNotifier extends Notifier<RegisterState> {
         requiresConfirmation: !result.isComplete,
         displayIdentifier: identifier,
       );
-    } catch (e) {
-      state = RegisterError(_formatError(e, isPhone: isPhone));
+    } on AuthDomainException catch (e) {
+      state = RegisterError(_errorMessage(e, isPhone: isPhone));
+    } catch (_) {
+      state = const RegisterError('Erro ao criar conta. Tente novamente.');
     }
   }
 
@@ -108,30 +111,20 @@ class RegisterNotifier extends Notifier<RegisterState> {
 
   void reset() => state = const RegisterIdle();
 
-  String _formatError(Object e, {bool isPhone = false}) {
-    final msg = e.toString();
-    if (msg.contains('LimitExceededException') ||
-        msg.contains('TooManyRequestsException')) {
-      return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.';
-    }
-    if (msg.contains('UsernameExistsException') ||
-        msg.contains('AliasExistsException')) {
-      return isPhone
-          ? 'field:identifier:Este número já está cadastrado.'
-          : 'field:identifier:Este e-mail já está cadastrado.';
-    }
-    if (msg.contains('InvalidPasswordException')) {
-      return 'field:password:Senha inválida. Use ao menos 8 caracteres com letras e números.';
-    }
-    if (msg.contains('InvalidParameterException')) {
-      return isPhone
-          ? 'field:identifier:Telefone inválido. Use o formato: +5511999998888'
-          : 'field:identifier:Verifique o e-mail informado.';
-    }
-    if (msg.contains('InvalidSmsRoleTrustRelationship') ||
-        msg.contains('SNSSandbox')) {
-      return 'field:identifier:Envio de SMS indisponível. Tente usar e-mail.';
-    }
-    return 'Erro ao criar conta. Tente novamente.';
-  }
+  String _errorMessage(AuthDomainException e, {required bool isPhone}) =>
+      switch (e) {
+        IdentifierAlreadyConfirmedException() => isPhone
+            ? 'field:identifier:Este número já está cadastrado.'
+            : 'field:identifier:Este e-mail já está cadastrado.',
+        AuthRateLimitException() =>
+          'Muitas tentativas. Aguarde alguns minutos e tente novamente.',
+        WeakPasswordException() =>
+          'field:password:Senha inválida. Use ao menos 8 caracteres com letras e números.',
+        InvalidIdentifierException() => isPhone
+            ? 'field:identifier:Telefone inválido. Use o formato: +5511999998888'
+            : 'field:identifier:Verifique o e-mail informado.',
+        SmsUnavailableException() =>
+          'field:identifier:Envio de SMS indisponível. Tente usar e-mail.',
+        _ => 'Erro ao criar conta. Tente novamente.',
+      };
 }

@@ -1,10 +1,11 @@
 import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
-import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:amplify_flutter/amplify_flutter.dart' hide InvalidCredentialsException;
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 import '../../domain/entities/auth_user_entity.dart';
 import '../../domain/entities/sign_up_result.dart' show AuthSignUpResult;
+import '../../domain/exceptions/auth_exceptions.dart';
 import '../../domain/repositories/i_auth_repository.dart';
 
 final class AuthRepositoryImpl implements IAuthRepository {
@@ -22,26 +23,38 @@ final class AuthRepositoryImpl implements IAuthRepository {
 
   @override
   Future<void> signInWithGoogle() async {
-    await Amplify.Auth.signInWithWebUI(
-      provider: AuthProvider.google,
-      options: const SignInWithWebUIOptions(
-        pluginOptions: CognitoSignInWithWebUIPluginOptions(
-          prompt: [CognitoSignInWithWebUIPrompt.selectAccount],
+    try {
+      await Amplify.Auth.signInWithWebUI(
+        provider: AuthProvider.google,
+        options: const SignInWithWebUIOptions(
+          pluginOptions: CognitoSignInWithWebUIPluginOptions(
+            prompt: [CognitoSignInWithWebUIPrompt.selectAccount],
+          ),
         ),
-      ),
-    );
+      );
+    } on UserCancelledException {
+      throw const AuthCancelledException();
+    } catch (_) {
+      throw const UnknownAuthException();
+    }
   }
 
   @override
   Future<void> signInWithApple() async {
-    await Amplify.Auth.signInWithWebUI(
-      provider: AuthProvider.apple,
-      options: const SignInWithWebUIOptions(
-        pluginOptions: CognitoSignInWithWebUIPluginOptions(
-          prompt: [CognitoSignInWithWebUIPrompt.selectAccount],
+    try {
+      await Amplify.Auth.signInWithWebUI(
+        provider: AuthProvider.apple,
+        options: const SignInWithWebUIOptions(
+          pluginOptions: CognitoSignInWithWebUIPluginOptions(
+            prompt: [CognitoSignInWithWebUIPrompt.selectAccount],
+          ),
         ),
-      ),
-    );
+      );
+    } on UserCancelledException {
+      throw const AuthCancelledException();
+    } catch (_) {
+      throw const UnknownAuthException();
+    }
   }
 
   @override
@@ -53,16 +66,15 @@ final class AuthRepositoryImpl implements IAuthRepository {
   Future<void> signInWithEmailPassword({
     required String email,
     required String password,
-  }) async {
-    await Amplify.Auth.signIn(username: email, password: password);
-  }
+  }) =>
+      _performSignIn(email, password);
 
   @override
   Future<void> signInWithIdentifier({
     required String identifier,
     required String password,
     required bool isPhone,
-  }) async {
+  }) {
     final String username;
     if (isPhone) {
       final digits = identifier.replaceAll(RegExp(r'[^\d]'), '');
@@ -70,7 +82,27 @@ final class AuthRepositoryImpl implements IAuthRepository {
     } else {
       username = identifier;
     }
-    await Amplify.Auth.signIn(username: username, password: password);
+    return _performSignIn(username, password);
+  }
+
+  Future<void> _performSignIn(String username, String password) async {
+    try {
+      await Amplify.Auth.signIn(username: username, password: password);
+    } on AuthNotAuthorizedException {
+      throw const InvalidCredentialsException();
+    } on UserNotFoundException {
+      throw const InvalidCredentialsException();
+    } on UserNotConfirmedException {
+      throw const AccountNotConfirmedException();
+    } on InvalidParameterException {
+      throw const InvalidIdentifierException();
+    } on LimitExceededException {
+      throw const AuthRateLimitException();
+    } on TooManyRequestsException {
+      throw const AuthRateLimitException();
+    } catch (_) {
+      throw const UnknownAuthException();
+    }
   }
 
   @override
@@ -104,18 +136,22 @@ final class AuthRepositoryImpl implements IAuthRepository {
         username: username,
         isComplete: result.isSignUpComplete,
       );
-    } on UsernameExistsException catch (e) {
-      // Cognito creates the user in UNCONFIRMED state immediately on signUp.
-      // If they abandon before confirming, the next attempt hits this exception.
-      // Try resending the OTP — if it works the account is unconfirmed and we
-      // can resume the confirmation flow. If it fails the account is confirmed
-      // (real duplicate) and we surface the original error.
-      try {
-        await Amplify.Auth.resendSignUpCode(username: username);
-        return AuthSignUpResult(username: username, isComplete: false);
-      } catch (_) {
-        throw e;
-      }
+    } on UsernameExistsException {
+      throw const IdentifierAlreadyConfirmedException();
+    } on AliasExistsException {
+      throw const IdentifierAlreadyConfirmedException();
+    } on InvalidPasswordException {
+      throw const WeakPasswordException();
+    } on InvalidParameterException {
+      throw const InvalidIdentifierException();
+    } on LimitExceededException {
+      throw const AuthRateLimitException();
+    } on TooManyRequestsException {
+      throw const AuthRateLimitException();
+    } on CodeDeliveryFailureException {
+      throw const SmsUnavailableException();
+    } catch (_) {
+      throw const UnknownAuthException();
     }
   }
 
@@ -124,15 +160,53 @@ final class AuthRepositoryImpl implements IAuthRepository {
     required String username,
     required String code,
   }) async {
-    await Amplify.Auth.confirmSignUp(
-      username: username,
-      confirmationCode: code,
-    );
+    try {
+      await Amplify.Auth.confirmSignUp(
+        username: username,
+        confirmationCode: code,
+      );
+    } on CodeMismatchException {
+      throw const InvalidOtpCodeException();
+    } on ExpiredCodeException {
+      throw const OtpCodeExpiredException();
+    } on AuthNotAuthorizedException {
+      // Cognito returns NotAuthorizedException when the account is already
+      // confirmed — the code is no longer usable.
+      throw const OtpAlreadyUsedException();
+    } on LimitExceededException {
+      throw const AuthRateLimitException();
+    } on TooManyRequestsException {
+      throw const AuthRateLimitException();
+    } catch (_) {
+      throw const UnknownAuthException();
+    }
   }
 
   @override
   Future<void> resendSignUpCode({required String username}) async {
-    await Amplify.Auth.resendSignUpCode(username: username);
+    try {
+      await Amplify.Auth.resendSignUpCode(username: username);
+    } on LimitExceededException {
+      throw const AuthRateLimitException();
+    } on TooManyRequestsException {
+      throw const AuthRateLimitException();
+    } catch (_) {
+      throw const UnknownAuthException();
+    }
+  }
+
+  @override
+  Future<void> refreshToken() async {
+    try {
+      await Amplify.Auth.fetchAuthSession(
+        options: const FetchAuthSessionOptions(forceRefresh: true),
+      );
+    } on SessionExpiredException {
+      throw const AuthSessionExpiredException();
+    }
+    // Other errors (network, etc.) are transient — the caller's timer will
+    // retry. Surfacing them as UnknownAuthException would sign out the user
+    // on a temporary connectivity blip.
   }
 
   @override

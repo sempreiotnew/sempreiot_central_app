@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'auth_provider.dart';
+import '../domain/exceptions/auth_exceptions.dart';
 import '../domain/repositories/i_auth_repository.dart';
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -59,8 +60,10 @@ class OtpNotifier extends Notifier<OtpState> {
           .read(authNotifierProvider.notifier)
           .signInWithEmailPassword(email: username, password: password);
       state = const OtpConfirmed();
-    } catch (e) {
-      state = OtpError(_formatError(e));
+    } on AuthDomainException catch (e) {
+      state = OtpError(_errorMessage(e));
+    } catch (_) {
+      state = const OtpError('Erro ao verificar código. Tente novamente.');
     }
   }
 
@@ -69,28 +72,26 @@ class OtpNotifier extends Notifier<OtpState> {
     try {
       await _repo.resendSignUpCode(username: username);
       state = const OtpResendSuccess();
-    } catch (e) {
-      state = OtpError(_formatError(e, isResend: true));
+    } on AuthDomainException catch (e) {
+      state = OtpError(_errorMessage(e, isResend: true));
+    } catch (_) {
+      state = const OtpError('Não foi possível reenviar o código. Tente novamente.');
     }
   }
 
   void reset() => state = const OtpIdle();
 
-  String _formatError(Object e, {bool isResend = false}) {
-    final msg = e.toString();
-    if (msg.contains('CodeMismatchException')) {
-      return 'Código incorreto. Verifique e tente novamente.';
-    }
-    if (msg.contains('ExpiredCodeException')) {
-      return 'Código expirado. Solicite um novo.';
-    }
-    if (msg.contains('LimitExceededException')) {
-      return 'Muitas tentativas. Aguarde alguns minutos.';
-    }
-    if (msg.contains('NotAuthorizedException')) {
-      return 'Este código não pode ser usado. A conta pode já estar confirmada.';
-    }
-    if (isResend) return 'Não foi possível reenviar o código. Tente novamente.';
-    return 'Erro ao verificar código. Tente novamente.';
-  }
+  String _errorMessage(AuthDomainException e, {bool isResend = false}) =>
+      switch (e) {
+        InvalidOtpCodeException() =>
+          'Código incorreto. Verifique e tente novamente.',
+        OtpCodeExpiredException() => 'Código expirado. Solicite um novo.',
+        OtpAlreadyUsedException() =>
+          'Este código não pode ser usado. A conta pode já estar confirmada.',
+        AuthRateLimitException() =>
+          'Muitas tentativas. Aguarde alguns minutos.',
+        _ => isResend
+            ? 'Não foi possível reenviar o código. Tente novamente.'
+            : 'Erro ao verificar código. Tente novamente.',
+      };
 }

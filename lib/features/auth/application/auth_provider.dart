@@ -1,12 +1,14 @@
 import 'dart:async';
 
-import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/repositories/auth_repository_impl.dart';
 import '../domain/entities/auth_user_entity.dart';
+import '../domain/exceptions/auth_exceptions.dart';
 import '../domain/repositories/i_auth_repository.dart';
+
+export '../domain/exceptions/auth_exceptions.dart' show FederatedEmailConflictException;
 
 final authRepositoryProvider = Provider<IAuthRepository>(
   (_) => AuthRepositoryImpl(),
@@ -14,12 +16,6 @@ final authRepositoryProvider = Provider<IAuthRepository>(
 
 final authNotifierProvider =
     AsyncNotifierProvider<AuthNotifier, AuthUserEntity?>(AuthNotifier.new);
-
-class FederatedEmailConflictException implements Exception {
-  const FederatedEmailConflictException();
-  @override
-  String toString() => 'Este e-mail já possui uma conta. Faça login com e-mail e senha.';
-}
 
 class AuthNotifier extends AsyncNotifier<AuthUserEntity?> {
   @override
@@ -36,11 +32,9 @@ class AuthNotifier extends AsyncNotifier<AuthUserEntity?> {
   void _startRefreshTimer() {
     final timer = Timer.periodic(const Duration(minutes: 20), (_) async {
       try {
-        await Amplify.Auth.fetchAuthSession(
-          options: const FetchAuthSessionOptions(forceRefresh: true),
-        );
+        await ref.read(authRepositoryProvider).refreshToken();
         debugPrint('[Auth] token refreshed silently');
-      } on SessionExpiredException {
+      } on AuthSessionExpiredException {
         debugPrint('[Auth] refresh token expired — signing out');
         signOut();
       } catch (e) {
@@ -76,7 +70,6 @@ class AuthNotifier extends AsyncNotifier<AuthUserEntity?> {
     required String password,
     required bool isPhone,
   }) async {
-    // state = const AsyncLoading();
     try {
       await ref.read(authRepositoryProvider).signInWithIdentifier(
             identifier: identifier,
@@ -86,8 +79,6 @@ class AuthNotifier extends AsyncNotifier<AuthUserEntity?> {
       final user = await ref.read(authRepositoryProvider).getCurrentUser();
       state = AsyncData(user);
       if (user != null) _startRefreshTimer();
-    } on UserCancelledException {
-      state = const AsyncData(null);
     } catch (e, st) {
       state = AsyncError(e, st);
       rethrow;
@@ -120,7 +111,7 @@ class AuthNotifier extends AsyncNotifier<AuthUserEntity?> {
       final user = await repo.getCurrentUser();
       state = AsyncData(user);
       if (user != null) _startRefreshTimer();
-    } on UserCancelledException {
+    } on AuthCancelledException {
       state = const AsyncData(null);
     } catch (e, st) {
       state = AsyncError(e, st);
@@ -134,7 +125,7 @@ class AuthNotifier extends AsyncNotifier<AuthUserEntity?> {
       final user = await ref.read(authRepositoryProvider).getCurrentUser();
       state = AsyncData(user);
       if (user != null) _startRefreshTimer();
-    } on UserCancelledException {
+    } on AuthCancelledException {
       state = const AsyncData(null);
     } catch (e, st) {
       state = AsyncError(e, st);

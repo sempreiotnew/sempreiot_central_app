@@ -4,7 +4,7 @@ import '../../auth/application/auth_provider.dart';
 import '../../auth/data/services/user_api_service.dart';
 import '../../iot/application/iot_provider.dart';
 
-export '../../auth/application/auth_provider.dart' show FederatedEmailConflictException;
+export '../../auth/domain/exceptions/auth_exceptions.dart' show FederatedEmailConflictException;
 
 /// Runs the full startup sequence once and returns true when the app is ready:
 ///   1. Wait for Cognito auth check

@@ -39,4 +39,8 @@ abstract interface class IAuthRepository {
   });
 
   Future<String?> getSignedInEmail();
+
+  /// Silently refreshes the Cognito access token.
+  /// Throws [AuthSessionExpiredException] if the refresh token has expired.
+  Future<void> refreshToken();
 }
