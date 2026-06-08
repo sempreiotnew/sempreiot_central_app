@@ -19,4 +19,10 @@ class AppColors {
   static const Color white = Color(0xFFFFFFFF);
   static const Color black = Color(0xFF000000);
   static const Color divider = Color(0xFF1F2937);
+
+  static const Color surface2Dark = Color(0xFF151F2E);
+
+  static const Color success = Color(0xFF52B788);
+  static const Color warning = Color(0xFFF59E0B);
+  static const Color error = Color(0xFFEF4444);
 }

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/config/amplify_config.dart';
 import 'core/config/app_config.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/theme_provider.dart';
 import 'features/app/application/app_init_provider.dart';
 import 'features/central/application/central_auth_provider.dart';
 import 'features/central/presentation/screens/central_main_screen.dart';
@@ -38,12 +39,13 @@ class SempreIoTApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(themeProvider);
     return MaterialApp(
       title: 'SempreIoT',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.dark,
+      themeMode: themeMode,
       home: AppConfig.isCentral ? const _CentralRoot() : const _AppRoot(),
     );
   }

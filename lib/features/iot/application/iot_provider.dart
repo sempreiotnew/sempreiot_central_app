@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +23,7 @@ class IotConnectionNotifier extends AsyncNotifier<bool> {
   bool _shouldReconnect = false;
   bool _connecting = false;
   bool _disposed = false;
+  Timer? _reconnectTimer;
 
   @override
   Future<bool> build() async {
@@ -29,24 +32,42 @@ class IotConnectionNotifier extends AsyncNotifier<bool> {
     ref.listen(authNotifierProvider, (_, next) {
       if (next is AsyncData && next.value == null) {
         _shouldReconnect = false;
+        _reconnectTimer?.cancel();
+        _reconnectTimer = null;
         ref.read(iotMqttRepositoryProvider).disconnect();
       }
     });
     ref.onDispose(() {
       _disposed = true;
       _shouldReconnect = false;
+      _reconnectTimer?.cancel();
+      _reconnectTimer = null;
       ref.read(iotMqttRepositoryProvider).disconnect();
     });
     return false;
   }
 
   Future<void> connect() async {
+    // Guard against duplicate calls: if we're already connected (state is
+    // AsyncData(true)), a second connect() from a stale appInitProvider run
+    // would open a new WebSocket with the same client-ID, triggering an AWS IoT
+    // session takeover that kicks the live connection and creates a reconnect loop.
+    if (_connecting) return;
+    if (state case AsyncData<bool>(:final value) when value == true) return;
+    // Cancel any pending retry so it doesn't race with this external call.
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
     _shouldReconnect = true;
     await _doConnect();
   }
 
   Future<void> _doConnect() async {
     if (!_shouldReconnect || _connecting) return;
+    // If already connected, skip — prevents a stale scheduled reconnect (from
+    // _scheduleReconnect, which calls _doConnect directly) from opening a second
+    // WebSocket after connect() already succeeded, which would cause AWS IoT to
+    // do a session takeover and kick the live connection, restarting the loop.
+    if (state.valueOrNull == true) return;
     _connecting = true;
     state = const AsyncLoading();
     try {
@@ -61,12 +82,6 @@ class IotConnectionNotifier extends AsyncNotifier<bool> {
       debugPrint('[IoT] ✓ connected');
 
       ref.invalidate(iotMessageStreamProvider);
-
-      repo.subscribe('#').listen(
-        (msg) => debugPrint('[IoT] ← [${msg.topic}]: ${msg.payload}'),
-        onError: (e) => debugPrint('[IoT] # subscription error: $e'),
-        onDone: () => debugPrint('[IoT] # subscription stream closed'),
-      );
     } on SessionExpiredException {
       // Refresh token has expired — stop retrying. AuthNotifier's background
       // timer will detect this on its next tick and sign the user out.
@@ -92,13 +107,15 @@ class IotConnectionNotifier extends AsyncNotifier<bool> {
 
   void _scheduleReconnect() {
     if (!_shouldReconnect) return;
-    
+    _reconnectTimer?.cancel();
     debugPrint('[IoT] reconnecting in ${_retryInterval.inSeconds}s…');
-    Future.delayed(_retryInterval, _doConnect);
+    _reconnectTimer = Timer(_retryInterval, _doConnect);
   }
 
   void disconnect() {
     _shouldReconnect = false;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
     ref.read(iotMqttRepositoryProvider).disconnect();
     state = const AsyncData(false);
     debugPrint('[IoT] manually disconnected');

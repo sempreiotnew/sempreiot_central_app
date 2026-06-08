@@ -50,11 +50,24 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
 
   @override
   Future<void> connect({void Function()? onDisconnected}) async {
-    // If the connection survived a hot restart, just transfer the disconnect
-    // callback to the new notifier — no new WebSocket, no session takeover.
+    // If the connection survived a hot restart, transfer the disconnect callback
+    // to the new notifier. We must also bump _generation and re-attach the
+    // subscription so that the old subscription's onDone closure (which captured
+    // the previous _generation value) becomes stale. Without this, when AWS IoT
+    // kicks the old socket (session takeover), the old onDone fires with a
+    // matching gen and triggers an infinite reconnect loop.
     if (_connected) {
+      final gen = ++_generation;
       _onDisconnected = onDisconnected;
-      debugPrint('[IoT] connect() called while already connected — handing off callback');
+      _connectedAt = DateTime.now(); // reset so age-check in _onDone is fresh after re-attach
+      await _subscription?.cancel();
+      _subscription = _channel!.stream.listen(
+        _onData,
+        onError: (e) { if (gen == _generation) _onError(e); },
+        onDone: () { if (gen == _generation) _onDone(); },
+        cancelOnError: false,
+      );
+      debugPrint('[IoT] connect() called while already connected — handing off callback (gen=$gen)');
       return;
     }
 
