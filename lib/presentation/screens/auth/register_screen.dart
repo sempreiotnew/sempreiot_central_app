@@ -560,7 +560,7 @@ class _BrandingPane extends StatelessWidget {
 
 // ── Form ───────────────────────────────────────────────────────────────────
 
-class _RegisterForm extends StatelessWidget {
+class _RegisterForm extends StatefulWidget {
   const _RegisterForm({
     required this.formKey,
     required this.nameCtrl,
@@ -602,20 +602,41 @@ class _RegisterForm extends StatelessWidget {
   final VoidCallback onLoginTap;
 
   @override
+  State<_RegisterForm> createState() => _RegisterFormState();
+}
+
+class _RegisterFormState extends State<_RegisterForm> {
+  // Explicit focus nodes so Enter/Next navigates directly to the target field
+  // instead of relying on FocusScope.nextFocus(), which lands on the suffix
+  // IconButton (visibility toggle) rather than the next text field.
+  final _identifierFocus = FocusNode();
+  final _passwordFocus = FocusNode();
+  final _confirmFocus = FocusNode();
+
+  @override
+  void dispose() {
+    _identifierFocus.dispose();
+    _passwordFocus.dispose();
+    _confirmFocus.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Form(
-      key: formKey,
+      key: widget.formKey,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           AuthField(
-            controller: nameCtrl,
+            controller: widget.nameCtrl,
             label: 'Nome completo',
             keyboardType: TextInputType.text,
             textCapitalization: TextCapitalization.words,
             textInputAction: TextInputAction.next,
             autocorrect: false,
             enableSuggestions: false,
+            onFieldSubmitted: (_) => _identifierFocus.requestFocus(),
             validator: (v) {
               if (v == null || v.trim().isEmpty) return 'Informe seu nome';
               if (v.trim().length < 2) return 'Nome muito curto';
@@ -628,21 +649,22 @@ class _RegisterForm extends StatelessWidget {
             children: [
               AuthToggleChip(
                 label: 'E-mail',
-                selected: !usePhone,
-                onTap: usePhone ? onToggleIdentifierMode : null,
+                selected: !widget.usePhone,
+                onTap: widget.usePhone ? widget.onToggleIdentifierMode : null,
               ),
               const SizedBox(width: 8),
               AuthToggleChip(
                 label: 'Telefone',
-                selected: usePhone,
-                onTap: !usePhone ? onToggleIdentifierMode : null,
+                selected: widget.usePhone,
+                onTap: !widget.usePhone ? widget.onToggleIdentifierMode : null,
               ),
             ],
           ),
           const SizedBox(height: 10),
           AuthField(
-            controller: identifierCtrl,
-            label: usePhone ? 'Telefone (ex: +5511999998888)' : 'E-mail',
+            controller: widget.identifierCtrl,
+            focusNode: _identifierFocus,
+            label: widget.usePhone ? 'Telefone (ex: +5511999998888)' : 'E-mail',
             // Keep keyboard type consistent across all fields (text) so iOS
             // doesn't dismiss and re-show the keyboard when focus moves between
             // fields with different keyboard types.
@@ -650,12 +672,13 @@ class _RegisterForm extends StatelessWidget {
             textInputAction: TextInputAction.next,
             autocorrect: false,
             enableSuggestions: false,
-            inputFormatters: usePhone
+            inputFormatters: widget.usePhone
                 ? [FilteringTextInputFormatter.allow(RegExp(r'[+\d]'))]
                 : null,
-            serverError: identifierServerError,
-            onChanged: onIdentifierChanged,
-            validator: usePhone
+            serverError: widget.identifierServerError,
+            onChanged: widget.onIdentifierChanged,
+            onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
+            validator: widget.usePhone
                 ? (v) {
                     if (v == null || v.trim().isEmpty) {
                       return 'Informe seu telefone';
@@ -681,18 +704,22 @@ class _RegisterForm extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           AuthField(
-            controller: passwordCtrl,
+            controller: widget.passwordCtrl,
+            focusNode: _passwordFocus,
             label: 'Senha',
             keyboardType: TextInputType.text,
             autocorrect: false,
             enableSuggestions: false,
-            obscureText: obscurePassword,
+            obscureText: widget.obscurePassword,
             textInputAction: TextInputAction.next,
-            serverError: passwordServerError,
-            onChanged: onPasswordChanged,
+            serverError: widget.passwordServerError,
+            onChanged: widget.onPasswordChanged,
+            // Explicitly focus the confirm field — nextFocus() would land on
+            // the suffix visibility toggle button instead.
+            onFieldSubmitted: (_) => _confirmFocus.requestFocus(),
             suffix: AuthVisibilityToggle(
-              obscure: obscurePassword,
-              onToggle: onTogglePassword,
+              obscure: widget.obscurePassword,
+              onToggle: widget.onTogglePassword,
             ),
             validator: (v) {
               if (v == null || v.isEmpty) return 'Informe uma senha';
@@ -708,28 +735,29 @@ class _RegisterForm extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           AuthField(
-            controller: confirmCtrl,
+            controller: widget.confirmCtrl,
+            focusNode: _confirmFocus,
             label: 'Confirmar senha',
             keyboardType: TextInputType.text,
             autocorrect: false,
             enableSuggestions: false,
-            obscureText: obscureConfirm,
+            obscureText: widget.obscureConfirm,
             textInputAction: TextInputAction.done,
-            onFieldSubmitted: (_) => onSubmit(),
+            onFieldSubmitted: (_) => widget.onSubmit(),
             suffix: AuthVisibilityToggle(
-              obscure: obscureConfirm,
-              onToggle: onToggleConfirm,
+              obscure: widget.obscureConfirm,
+              onToggle: widget.onToggleConfirm,
             ),
             validator: (v) {
               if (v == null || v.isEmpty) return 'Confirme sua senha';
-              if (v != passwordCtrl.text) return 'As senhas não coincidem';
+              if (v != widget.passwordCtrl.text) return 'As senhas não coincidem';
               return null;
             },
           ),
           const SizedBox(height: 28),
-          AuthSubmitButton(label: 'Criar conta', isLoading: isLoading, onPressed: onSubmit),
+          AuthSubmitButton(label: 'Criar conta', isLoading: widget.isLoading, onPressed: widget.onSubmit),
           const SizedBox(height: 20),
-          _LoginLink(onTap: onLoginTap),
+          _LoginLink(onTap: widget.onLoginTap),
         ],
       ),
     );

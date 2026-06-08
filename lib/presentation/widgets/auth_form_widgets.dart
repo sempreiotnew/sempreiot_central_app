@@ -9,6 +9,7 @@ class AuthField extends StatelessWidget {
     required this.controller,
     required this.label,
     required this.validator,
+    this.focusNode,
     this.keyboardType,
     this.textCapitalization = TextCapitalization.none,
     this.textInputAction,
@@ -23,6 +24,7 @@ class AuthField extends StatelessWidget {
   });
 
   final TextEditingController controller;
+  final FocusNode? focusNode;
   final String label;
   final String? Function(String?) validator;
   final TextInputType? keyboardType;
@@ -47,6 +49,7 @@ class AuthField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controller,
+      focusNode: focusNode,
       obscureText: obscureText,
       keyboardType: keyboardType,
       textCapitalization: textCapitalization,
