@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../features/auth/application/auth_provider.dart';
+import '../../../shared/shell/main_shell_screen.dart';
 import '../auth/login_screen.dart';
 
 class MainScreen extends ConsumerWidget {
@@ -18,13 +19,6 @@ class MainScreen extends ConsumerWidget {
       }
     });
 
-    return Scaffold(
-      body: Center(
-        child: ElevatedButton(
-          onPressed: () => ref.read(authNotifierProvider.notifier).signOut(),
-          child: const Text('Logout'),
-        ),
-      ),
-    );
+    return const MainShellScreen();
   }
 }
