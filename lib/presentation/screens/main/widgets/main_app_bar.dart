@@ -41,15 +41,20 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Row(
           children: [
-            if (!isLocked) ...[
-              _BarIconButton(
-                icon: Icons.menu_rounded,
-                onTap: onMenuTap ?? () {},
-                tooltip: 'Menu',
+            AnimatedOpacity(
+              opacity: isLocked ? 0.0 : 1.0,
+              duration: const Duration(milliseconds: 350),
+              curve: Curves.easeInOutCubic,
+              child: IgnorePointer(
+                ignoring: isLocked,
+                child: _BarIconButton(
+                  icon: Icons.menu_rounded,
+                  onTap: onMenuTap ?? () {},
+                  tooltip: 'Menu',
+                ),
               ),
-              const SizedBox(width: 6),
-            ] else
-              const SizedBox(width: 12),
+            ),
+            const SizedBox(width: 6),
             const Expanded(child: _Branding()),
             const WifiIndicator(),
             if (AppConfig.isCentral) ...[
@@ -58,30 +63,53 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
             ],
             const SizedBox(width: 2),
             MqttIndicator(disabled: AppConfig.isCentral),
-            if (AppConfig.isCentral && !isLocked) ...[
+            if (AppConfig.isCentral) ...[
               const SizedBox(width: 2),
-              _LockButton(
-                onTap: () => ref.read(centralAuthProvider.notifier).reset(),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                transitionBuilder: (child, animation) {
+                  final scale = Tween<double>(begin: 0.65, end: 1.0).animate(
+                    CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOutBack,
+                    ),
+                  );
+                  return FadeTransition(
+                    opacity: animation,
+                    child: ScaleTransition(scale: scale, child: child),
+                  );
+                },
+                child: isLocked
+                    ? Tooltip(
+                        key: const ValueKey('lk_ind'),
+                        message: 'Toque na tela para desbloquear',
+                        child: Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: Icon(
+                            Icons.lock_rounded,
+                            color:
+                                context.textSecondary.withValues(alpha: 0.5),
+                            size: 18,
+                          ),
+                        ),
+                      )
+                    : _LockButton(
+                        key: const ValueKey('lk_btn'),
+                        onTap: () =>
+                            ref.read(centralAuthProvider.notifier).reset(),
+                      ),
               ),
             ],
-            if (isLocked) ...[
-              const SizedBox(width: 6),
-              Tooltip(
-                message: 'Toque na tela para desbloquear',
-                child: Padding(
-                  padding: const EdgeInsets.all(6),
-                  child: Icon(
-                    Icons.lock_rounded,
-                    color: context.textSecondary.withValues(alpha: 0.5),
-                    size: 18,
-                  ),
-                ),
+            const SizedBox(width: 10),
+            AnimatedOpacity(
+              opacity: isLocked ? 0.0 : 1.0,
+              duration: const Duration(milliseconds: 350),
+              curve: Curves.easeInOutCubic,
+              child: IgnorePointer(
+                ignoring: isLocked,
+                child: const _UserAvatar(),
               ),
-            ],
-            if (!isLocked) ...[
-              const SizedBox(width: 10),
-              const _UserAvatar(),
-            ],
+            ),
             const SizedBox(width: 6),
           ],
         ),
@@ -174,7 +202,7 @@ class _BarIconButton extends StatelessWidget {
 }
 
 class _LockButton extends StatelessWidget {
-  const _LockButton({required this.onTap});
+  const _LockButton({super.key, required this.onTap});
 
   final VoidCallback onTap;
 

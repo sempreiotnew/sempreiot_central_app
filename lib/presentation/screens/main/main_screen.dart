@@ -75,18 +75,31 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                   onTabSelected: (tab) => setState(() => _currentTab = tab),
                 ),
           body: _TabBody(currentTab: _currentTab),
-          bottomNavigationBar: isLocked
-              ? null
-              : AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  transitionBuilder: (child, animation) =>
-                      FadeTransition(opacity: animation, child: child),
-                  child: MainBottomNav(
-                    key: const ValueKey('bottom_nav'),
-                    currentTab: _currentTab,
-                    onTabChanged: (tab) => setState(() => _currentTab = tab),
+          bottomNavigationBar: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 420),
+              transitionBuilder: (child, animation) {
+                final curved = CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeInOutCubic,
+                );
+                return FadeTransition(
+                  opacity: curved,
+                  child: SizeTransition(
+                    sizeFactor: curved,
+                    axisAlignment: -1,
+                    child: child,
                   ),
-                ),
+                );
+              },
+              child: isLocked
+                  ? const SizedBox.shrink(key: ValueKey('nav_locked'))
+                  : MainBottomNav(
+                      key: const ValueKey('nav_unlocked'),
+                      currentTab: _currentTab,
+                      onTabChanged: (tab) =>
+                          setState(() => _currentTab = tab),
+                    ),
+            ),
         );
 
         return Stack(
@@ -147,15 +160,20 @@ class _TabBody extends StatelessWidget {
         key: ValueKey(currentTab),
         child: switch (currentTab) {
           MainTab.principal => const _PrincipalTab(),
+          MainTab.central => const _PlaceholderTab(
+              icon: Icons.sensors_rounded,
+              title: 'Central',
+              subtitle: 'Configurações e detalhes da central.',
+            ),
+          MainTab.centrais => const _PlaceholderTab(
+              icon: Icons.hub_rounded,
+              title: 'Centrais',
+              subtitle: 'Lista de centrais cadastradas.',
+            ),
           MainTab.devices => const _PlaceholderTab(
               icon: Icons.devices_rounded,
               title: 'Dispositivos',
               subtitle: 'Nenhum dispositivo conectado ainda.',
-            ),
-          MainTab.network => const _PlaceholderTab(
-              icon: Icons.hub_rounded,
-              title: 'Rede',
-              subtitle: 'Configurações de rede e topologia.',
             ),
           MainTab.social => const _PlaceholderTab(
               icon: Icons.group_rounded,
@@ -176,13 +194,27 @@ class _PrincipalTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isOnline = ref.watch(connectivityProvider).valueOrNull ?? false;
+    return AppConfig.isCentral
+        ? _CentralDashboard(isOnline: isOnline)
+        : _AppDashboard(isOnline: isOnline);
+  }
+}
 
-    // Placeholder counts — wire to real providers when backend is ready.
-    const totalDevices = 0;
-    const totalAlertas = 0;
-    const totalOk = 0;
-    const totalAlarme = 0;
+// ── Central dashboard ────────────────────────────────────────────────────────
 
+class _CentralDashboard extends StatelessWidget {
+  const _CentralDashboard({required this.isOnline});
+
+  final bool isOnline;
+
+  // Placeholder counts — wire to real providers when backend is ready.
+  static const _totalDevices = 0;
+  static const _totalAlertas = 0;
+  static const _totalOk = 0;
+  static const _totalAlarme = 0;
+
+  @override
+  Widget build(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -195,7 +227,7 @@ class _PrincipalTab extends ConsumerWidget {
           const _MetricCard(
             icon: Icons.devices_rounded,
             label: 'Total Dispositivos',
-            value: totalDevices,
+            value: _totalDevices,
             accent: AppColors.secondary,
           ),
           const SizedBox(height: 8),
@@ -207,7 +239,7 @@ class _PrincipalTab extends ConsumerWidget {
                 child: _MetricCard(
                   icon: Icons.notifications_rounded,
                   label: 'Alertas',
-                  value: totalAlertas,
+                  value: _totalAlertas,
                   accent: AppColors.warning,
                   compact: true,
                 ),
@@ -217,7 +249,7 @@ class _PrincipalTab extends ConsumerWidget {
                 child: _MetricCard(
                   icon: Icons.check_circle_rounded,
                   label: 'OK',
-                  value: totalOk,
+                  value: _totalOk,
                   accent: AppColors.success,
                   compact: true,
                 ),
@@ -227,13 +259,165 @@ class _PrincipalTab extends ConsumerWidget {
                 child: _MetricCard(
                   icon: Icons.local_fire_department_rounded,
                   label: 'Alarme',
-                  value: totalAlarme,
+                  value: _totalAlarme,
                   accent: AppColors.error,
                   compact: true,
                 ),
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── App dashboard (non-Central) ──────────────────────────────────────────────
+
+class _AppDashboard extends StatelessWidget {
+  const _AppDashboard({required this.isOnline});
+
+  final bool isOnline;
+
+  // Placeholder counts — wire to real providers when backend is ready.
+  static const _totalCentrals = 0;
+  static const _totalDevices = 0;
+  static const _totalAlertas = 0;
+  static const _totalOk = 0;
+  static const _totalAlarme = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _AppStatusCard(isOnline: isOnline),
+          const SizedBox(height: 12),
+          const _SectionLabel('REDE'),
+          const SizedBox(height: 8),
+          const _MetricCard(
+            icon: Icons.sensors_rounded,
+            label: 'Total Centrais',
+            value: _totalCentrals,
+            accent: AppColors.secondary,
+          ),
+          const SizedBox(height: 8),
+          const _MetricCard(
+            icon: Icons.devices_rounded,
+            label: 'Total Dispositivos',
+            value: _totalDevices,
+            accent: AppColors.secondary,
+          ),
+          const SizedBox(height: 8),
+          const _SectionLabel('EVENTOS'),
+          const SizedBox(height: 8),
+          const Row(
+            children: [
+              Expanded(
+                child: _MetricCard(
+                  icon: Icons.notifications_rounded,
+                  label: 'Alertas',
+                  value: _totalAlertas,
+                  accent: AppColors.warning,
+                  compact: true,
+                ),
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: _MetricCard(
+                  icon: Icons.check_circle_rounded,
+                  label: 'OK',
+                  value: _totalOk,
+                  accent: AppColors.success,
+                  compact: true,
+                ),
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: _MetricCard(
+                  icon: Icons.local_fire_department_rounded,
+                  label: 'Alarme',
+                  value: _totalAlarme,
+                  accent: AppColors.error,
+                  compact: true,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AppStatusCard extends StatelessWidget {
+  const _AppStatusCard({required this.isOnline});
+
+  final bool isOnline;
+
+  @override
+  Widget build(BuildContext context) {
+    final statusColor = isOnline ? AppColors.success : AppColors.error;
+    final statusLabel = isOnline ? 'Conectado' : 'Sem conexão';
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: statusColor.withValues(alpha: 0.25),
+          width: 0.8,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [AppColors.primary, AppColors.secondary],
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.sensors_rounded,
+              color: AppColors.white,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'SempreIoT',
+                  style: TextStyle(
+                    color: context.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  statusLabel,
+                  style: TextStyle(
+                    color: statusColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _PulsingStatusDot(color: statusColor, active: isOnline),
         ],
       ),
     );

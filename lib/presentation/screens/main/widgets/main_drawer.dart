@@ -41,7 +41,7 @@ class MainDrawer extends ConsumerWidget {
                 children: [
                   const _SectionLabel('NAVEGAÇÃO'),
                   const SizedBox(height: 4),
-                  ...MainTab.values.map(
+                  ...MainTab.tabs.map(
                     (tab) => _NavItem(
                       tab: tab,
                       active: tab == currentTab,

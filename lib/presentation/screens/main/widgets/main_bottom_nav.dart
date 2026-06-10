@@ -31,7 +31,7 @@ class MainBottomNav extends StatelessWidget {
         child: SizedBox(
           height: 62,
           child: Row(
-            children: MainTab.values.map((tab) {
+            children: MainTab.tabs.map((tab) {
               return Expanded(
                 child: _NavItem(
                   tab: tab,
