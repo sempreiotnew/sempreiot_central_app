@@ -191,9 +191,12 @@ class _BarIconButton extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Icon(icon, color: context.textSecondary, size: 22),
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: Center(
+              child: Icon(icon, color: context.textSecondary, size: 22),
+            ),
           ),
         ),
       ),
@@ -216,12 +219,15 @@ class _LockButton extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(6),
-            child: Icon(
-              Icons.lock_outline_rounded,
-              color: context.textSecondary,
-              size: 18,
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: Center(
+              child: Icon(
+                Icons.lock_outline_rounded,
+                color: context.textSecondary,
+                size: 18,
+              ),
             ),
           ),
         ),
@@ -241,7 +247,9 @@ class _UserAvatar extends ConsumerWidget {
 
     return GestureDetector(
       onTap: () => _showProfile(context, ref, initials),
-      child: Container(
+      child: Padding(
+        padding: const EdgeInsets.all(5),
+        child: Container(
         width: 34,
         height: 34,
         decoration: BoxDecoration(
@@ -266,6 +274,7 @@ class _UserAvatar extends ConsumerWidget {
             letterSpacing: 0.3,
           ),
         ),
+      ),
       ),
     );
   }

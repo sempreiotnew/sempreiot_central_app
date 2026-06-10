@@ -7,6 +7,7 @@ import '../../../../core/theme/theme_ext.dart';
 import '../../../../core/theme/theme_provider.dart';
 import '../../../../features/auth/application/auth_provider.dart';
 import '../../../../features/central/application/central_auth_provider.dart';
+import '../../../../features/storage/presentation/screens/storage_screen.dart';
 import '../main_tab.dart';
 
 class MainDrawer extends ConsumerWidget {
@@ -54,6 +55,24 @@ class MainDrawer extends ConsumerWidget {
                   const SizedBox(height: 16),
                   const _SectionLabel('SISTEMA'),
                   const SizedBox(height: 4),
+                  if (AppConfig.isCentral)
+                    _DrawerItem(
+                      icon: Icons.storage_rounded,
+                      label: 'Armazenamento',
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.of(context).push(
+                          PageRouteBuilder(
+                            pageBuilder: (_, __, ___) =>
+                                const StorageScreen(),
+                            transitionsBuilder: (_, anim, __, child) =>
+                                FadeTransition(opacity: anim, child: child),
+                            transitionDuration:
+                                const Duration(milliseconds: 300),
+                          ),
+                        );
+                      },
+                    ),
                   const _ThemeToggleItem(),
                   const _DrawerItem(
                     icon: Icons.info_outline_rounded,
@@ -310,10 +329,11 @@ class _ThemeToggleItem extends ConsumerWidget {
 }
 
 class _DrawerItem extends StatelessWidget {
-  const _DrawerItem({required this.icon, required this.label});
+  const _DrawerItem({required this.icon, required this.label, this.onTap});
 
   final IconData icon;
   final String label;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -324,7 +344,7 @@ class _DrawerItem extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
-          onTap: null,
+          onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
             child: Row(
