@@ -220,7 +220,12 @@ final class AuthRepositoryImpl implements IAuthRepository {
       throw const AuthRateLimitException();
     } on TooManyRequestsException {
       throw const AuthRateLimitException();
-    } catch (_) {
+    } on CodeDeliveryFailureException {
+      throw const SmsUnavailableException();
+    } on AuthNotAuthorizedException {
+      throw const OtpAlreadyUsedException();
+    } catch (e, st) {
+      safePrint('resendSignUpCode unknown error: $e\n$st');
       throw const UnknownAuthException();
     }
   }

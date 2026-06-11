@@ -106,6 +106,7 @@ class RegisterNotifier extends Notifier<RegisterState> {
     } on AuthDomainException catch (e) {
       state = RegisterError(_errorMessage(e, isPhone: isPhone));
     } catch (_) {
+      print(_.toString());
       state = const RegisterError('Erro ao criar conta. Tente novamente.');
     }
   }
