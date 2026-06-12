@@ -1,13 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../features/auth/application/otp_provider.dart';
 import '../../widgets/iot_network_animation.dart';
+import '../../widgets/otp_input_row.dart';
 import '../splash/splash_screen.dart';
 
 class OtpVerificationScreen extends ConsumerStatefulWidget {
@@ -439,7 +439,7 @@ class _OtpContent extends StatelessWidget {
         ),
         const SizedBox(height: 32),
         // 6-digit input — single hidden field + 6 visual boxes
-        _OtpInputRow(
+        OtpInputRow(
           controller: otpController,
           focusNode: otpFocusNode,
           enabled: !isLoading,
@@ -513,145 +513,6 @@ class _OtpContent extends StatelessWidget {
         ),
         const SizedBox(height: 16),
       ],
-    );
-  }
-}
-
-// ── OTP input: single invisible TextField overlaid by 6 visual boxes ────────
-//
-// StatelessWidget + AnimatedBuilder: the visual boxes are rebuilt reactively,
-// but the TextField sibling is NEVER rebuilt during typing. Rebuilding the
-// TextField re-sends keyboard config to iOS on every keystroke, causing the
-// keyboard to briefly dismiss/reopen and triggering UIKit constraint warnings.
-
-class _OtpInputRow extends StatelessWidget {
-  const _OtpInputRow({
-    required this.controller,
-    required this.focusNode,
-    required this.enabled,
-    required this.onChanged,
-  });
-
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final bool enabled;
-  final void Function(String) onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    // Opacity(0) disables hit testing in Flutter, so the GestureDetector
-    // programmatically requests focus when the user taps the input area.
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () {
-        if (enabled) focusNode.requestFocus();
-      },
-      child: Stack(
-        children: [
-          // Visual digit boxes — AnimatedBuilder scopes rebuilds to this
-          // subtree only, leaving the TextField sibling untouched.
-          AnimatedBuilder(
-            animation: Listenable.merge([controller, focusNode]),
-            builder: (context, _) {
-              final text = controller.text;
-              final hasFocus = focusNode.hasFocus;
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(6, (i) {
-                  final char = i < text.length ? text[i] : '';
-                  final isActive = hasFocus && i == text.length.clamp(0, 5);
-                  return _DigitBox(
-                    char: char,
-                    isActive: isActive,
-                    enabled: enabled,
-                  );
-                }),
-              );
-            },
-          ),
-          // Stable hidden TextField — owns the keyboard session.
-          // Positioned outside AnimatedBuilder so it is never recreated
-          // during typing. The ValueKey pins its element in the widget tree.
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0,
-              child: TextField(
-                key: const ValueKey('_otp_hidden'),
-                controller: controller,
-                focusNode: focusNode,
-                enabled: enabled,
-                maxLength: 6,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: false,
-                  signed: false,
-                ),
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                // Enables the "From Messages" OTP autofill suggestion on iOS.
-                autofillHints: const [AutofillHints.oneTimeCode],
-                textInputAction: TextInputAction.done,
-                // No-op prevents Flutter's default nextFocus() call on Enter,
-                // which would jump focus to the Confirm button.
-                onEditingComplete: () {},
-                autocorrect: false,
-                enableSuggestions: false,
-                onChanged: onChanged,
-                decoration: const InputDecoration(
-                  counterText: '',
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Visual digit box (display only) ────────────────────────────────────────
-
-class _DigitBox extends StatelessWidget {
-  const _DigitBox({
-    required this.char,
-    required this.isActive,
-    required this.enabled,
-  });
-
-  final String char;
-  final bool isActive;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) {
-    final borderColor = isActive
-        ? AppColors.secondary
-        : char.isNotEmpty
-            ? AppColors.secondary.withValues(alpha: 0.5)
-            : AppColors.divider;
-    final borderWidth = isActive ? 2.0 : 1.0;
-
-    return Container(
-      width: 48,
-      height: 60,
-      decoration: BoxDecoration(
-        color: enabled
-            ? AppColors.surfaceDark
-            : AppColors.surfaceDark.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderColor, width: borderWidth),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        char,
-        style: TextStyle(
-          color: enabled
-              ? AppColors.textPrimaryDark
-              : AppColors.textPrimaryDark.withValues(alpha: 0.5),
-          fontSize: 22,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
     );
   }
 }

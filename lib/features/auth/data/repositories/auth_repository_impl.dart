@@ -231,6 +231,62 @@ final class AuthRepositoryImpl implements IAuthRepository {
   }
 
   @override
+  Future<({String destination, bool isSms})> sendPasswordResetCode(
+    String identifier, {
+    required bool isPhone,
+  }) async {
+    final username = isPhone
+        ? '${identifier.replaceAll(RegExp(r'[^\d]'), '')}@phone.sempreiot'
+        : identifier;
+    try {
+      final result = await Amplify.Auth.resetPassword(username: username);
+      final details = result.nextStep.codeDeliveryDetails;
+      final destination = details?.destination ?? identifier;
+      final isSms = details?.deliveryMedium != DeliveryMedium.email;
+      return (destination: destination, isSms: isSms);
+    } on UserNotFoundException {
+      throw const PasswordResetUserNotFoundException();
+    } on InvalidParameterException {
+      throw const InvalidIdentifierException();
+    } on LimitExceededException {
+      throw const AuthRateLimitException();
+    } on TooManyRequestsException {
+      throw const AuthRateLimitException();
+    } catch (_) {
+      throw const UnknownAuthException();
+    }
+  }
+
+  @override
+  Future<void> confirmPasswordReset({
+    required String username,
+    required String code,
+    required String newPassword,
+  }) async {
+    try {
+      await Amplify.Auth.confirmResetPassword(
+        username: username,
+        newPassword: newPassword,
+        confirmationCode: code,
+      );
+    } on CodeMismatchException {
+      throw const InvalidOtpCodeException();
+    } on ExpiredCodeException {
+      throw const OtpCodeExpiredException();
+    } on InvalidPasswordException {
+      throw const WeakPasswordException();
+    } on AuthNotAuthorizedException {
+      throw const InvalidOtpCodeException();
+    } on LimitExceededException {
+      throw const AuthRateLimitException();
+    } on TooManyRequestsException {
+      throw const AuthRateLimitException();
+    } catch (_) {
+      throw const UnknownAuthException();
+    }
+  }
+
+  @override
   Future<void> refreshToken() async {
     try {
       await Amplify.Auth.fetchAuthSession(

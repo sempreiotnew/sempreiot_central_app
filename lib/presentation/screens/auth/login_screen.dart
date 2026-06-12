@@ -9,6 +9,7 @@ import '../../../features/app/application/app_init_provider.dart';
 import '../../../features/auth/application/auth_provider.dart';
 import '../main/main_screen.dart';
 import '../splash/splash_screen.dart';
+import 'forgot_password_screen.dart';
 import 'login_modal.dart';
 import 'register_screen.dart';
 
@@ -20,6 +21,9 @@ void _showSempreIoTLoginModal(BuildContext context) {
     builder: (_) => SempreIoTLoginModal(
       onCreateAccount: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => const RegisterScreen()),
+      ),
+      onForgotPassword: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
       ),
     ),
   );

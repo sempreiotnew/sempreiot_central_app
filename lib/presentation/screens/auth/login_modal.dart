@@ -9,9 +9,14 @@ import '../../widgets/auth_form_widgets.dart';
 import '../splash/splash_screen.dart';
 
 class SempreIoTLoginModal extends ConsumerStatefulWidget {
-  const SempreIoTLoginModal({super.key, this.onCreateAccount});
+  const SempreIoTLoginModal({
+    super.key,
+    this.onCreateAccount,
+    this.onForgotPassword,
+  });
 
   final VoidCallback? onCreateAccount;
+  final VoidCallback? onForgotPassword;
 
   @override
   ConsumerState<SempreIoTLoginModal> createState() =>
@@ -157,6 +162,10 @@ class _SempreIoTLoginModalState extends ConsumerState<SempreIoTLoginModal> {
                         Navigator.of(context).pop();
                         widget.onCreateAccount?.call();
                       },
+                      onForgotPassword: () {
+                        Navigator.of(context).pop();
+                        widget.onForgotPassword?.call();
+                      },
                     ),
                   ],
                 ),
@@ -276,6 +285,7 @@ class _LoginForm extends StatelessWidget {
     required this.onTogglePassword,
     required this.onSubmit,
     required this.onCreateAccount,
+    required this.onForgotPassword,
     this.identifierServerError,
     this.passwordServerError,
   });
@@ -294,6 +304,7 @@ class _LoginForm extends StatelessWidget {
   final VoidCallback onTogglePassword;
   final VoidCallback onSubmit;
   final VoidCallback onCreateAccount;
+  final VoidCallback onForgotPassword;
 
   @override
   Widget build(BuildContext context) {
@@ -384,7 +395,23 @@ class _LoginForm extends StatelessWidget {
               return null;
             },
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: onForgotPassword,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.textSecondaryDark,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+              ),
+              child: const Text(
+                'Esqueci minha senha',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           AuthSubmitButton(
             label: 'Entrar',
             isLoading: isLoading,

@@ -84,6 +84,13 @@ final class OtpAlreadyUsedException extends AuthDomainException {
   const OtpAlreadyUsedException();
 }
 
+// ── Password reset ────────────────────────────────────────────────────────────
+
+/// The account for the given identifier was not found during password reset.
+final class PasswordResetUserNotFoundException extends AuthDomainException {
+  const PasswordResetUserNotFoundException();
+}
+
 // ── Fallback ──────────────────────────────────────────────────────────────────
 
 /// Any error that does not map to a specific domain case.
