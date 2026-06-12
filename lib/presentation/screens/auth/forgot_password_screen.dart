@@ -43,6 +43,16 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   String? _displayIdentifier;
 
   @override
+  void initState() {
+    super.initState();
+    // Riverpod disallows state mutation during build. Defer to post-frame so
+    // the screen always opens fresh regardless of previous navigation state.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(forgotPasswordNotifierProvider.notifier).reset();
+    });
+  }
+
+  @override
   void dispose() {
     _identifierCtrl.dispose();
     _otpCtrl.dispose();
