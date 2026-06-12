@@ -246,6 +246,8 @@ final class AuthRepositoryImpl implements IAuthRepository {
       return (destination: destination, isSms: isSms);
     } on UserNotFoundException {
       throw const PasswordResetUserNotFoundException();
+    } on CodeDeliveryFailureException {
+      throw const SmsUnavailableException();
     } on InvalidParameterException {
       throw const InvalidIdentifierException();
     } on LimitExceededException {

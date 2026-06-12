@@ -199,8 +199,10 @@ class ForgotPasswordNotifier extends Notifier<ForgotPasswordState> {
   String _sendErrorMessage(AuthDomainException e) => switch (e) {
         PasswordResetUserNotFoundException() =>
           'Não encontramos uma conta com esse identificador.',
+        SmsUnavailableException() =>
+          'Não foi possível enviar o SMS. O número pode não estar habilitado para receber mensagens.',
         InvalidIdentifierException() =>
-          'Verifique o e-mail ou telefone informado.',
+          'R e-mail ou telefone informado.',
         AuthRateLimitException() =>
           'Muitas tentativas. Aguarde alguns minutos.',
         _ => 'Não foi possível enviar o código. Tente novamente.',

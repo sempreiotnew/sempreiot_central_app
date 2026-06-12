@@ -193,19 +193,19 @@ class _PrincipalTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isOnline = ref.watch(connectivityProvider).valueOrNull ?? false;
+    final networkStatus = ref.watch(networkStatusProvider);
     return AppConfig.isCentral
-        ? _CentralDashboard(isOnline: isOnline)
-        : _AppDashboard(isOnline: isOnline);
+        ? _CentralDashboard(networkStatus: networkStatus)
+        : _AppDashboard(networkStatus: networkStatus);
   }
 }
 
 // ── Central dashboard ────────────────────────────────────────────────────────
 
 class _CentralDashboard extends StatelessWidget {
-  const _CentralDashboard({required this.isOnline});
+  const _CentralDashboard({required this.networkStatus});
 
-  final bool isOnline;
+  final NetworkStatus networkStatus;
 
   // Placeholder counts — wire to real providers when backend is ready.
   static const _totalDevices = 0;
@@ -220,7 +220,7 @@ class _CentralDashboard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _CentralStatusCard(isOnline: isOnline),
+          _CentralStatusCard(networkStatus: networkStatus),
           const SizedBox(height: 12),
           const _SectionLabel('DISPOSITIVOS'),
           const SizedBox(height: 8),
@@ -275,9 +275,9 @@ class _CentralDashboard extends StatelessWidget {
 // ── App dashboard (non-Central) ──────────────────────────────────────────────
 
 class _AppDashboard extends StatelessWidget {
-  const _AppDashboard({required this.isOnline});
+  const _AppDashboard({required this.networkStatus});
 
-  final bool isOnline;
+  final NetworkStatus networkStatus;
 
   // Placeholder counts — wire to real providers when backend is ready.
   static const _totalCentrals = 0;
@@ -293,7 +293,7 @@ class _AppDashboard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _AppStatusCard(isOnline: isOnline),
+          _AppStatusCard(networkStatus: networkStatus),
           const SizedBox(height: 12),
           const _SectionLabel('REDE'),
           const SizedBox(height: 8),
@@ -353,14 +353,17 @@ class _AppDashboard extends StatelessWidget {
 }
 
 class _AppStatusCard extends StatelessWidget {
-  const _AppStatusCard({required this.isOnline});
+  const _AppStatusCard({required this.networkStatus});
 
-  final bool isOnline;
+  final NetworkStatus networkStatus;
 
   @override
   Widget build(BuildContext context) {
-    final statusColor = isOnline ? AppColors.success : AppColors.error;
-    final statusLabel = isOnline ? 'Conectado' : 'Sem conexão';
+    final (statusColor, statusLabel) = switch (networkStatus) {
+      NetworkStatus.online  => (AppColors.success, 'Conectado'),
+      NetworkStatus.limited => (AppColors.warning, 'Acesso limitado'),
+      NetworkStatus.offline => (AppColors.error,   'Sem conexão'),
+    };
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -417,7 +420,7 @@ class _AppStatusCard extends StatelessWidget {
               ],
             ),
           ),
-          _PulsingStatusDot(color: statusColor, active: isOnline),
+          _PulsingStatusDot(color: statusColor, active: networkStatus == NetworkStatus.online),
         ],
       ),
     );
@@ -446,14 +449,17 @@ class _SectionLabel extends StatelessWidget {
 }
 
 class _CentralStatusCard extends StatelessWidget {
-  const _CentralStatusCard({required this.isOnline});
+  const _CentralStatusCard({required this.networkStatus});
 
-  final bool isOnline;
+  final NetworkStatus networkStatus;
 
   @override
   Widget build(BuildContext context) {
-    final statusColor = isOnline ? AppColors.success : AppColors.error;
-    final statusLabel = isOnline ? 'Operacional' : 'Sem conexão';
+    final (statusColor, statusLabel) = switch (networkStatus) {
+      NetworkStatus.online  => (AppColors.success, 'Operacional'),
+      NetworkStatus.limited => (AppColors.warning, 'Acesso limitado'),
+      NetworkStatus.offline => (AppColors.error,   'Sem conexão'),
+    };
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -507,7 +513,7 @@ class _CentralStatusCard extends StatelessWidget {
               ],
             ),
           ),
-          _PulsingStatusDot(color: statusColor, active: isOnline),
+          _PulsingStatusDot(color: statusColor, active: networkStatus == NetworkStatus.online),
         ],
       ),
     );
@@ -827,8 +833,7 @@ class _PinOverlayState extends ConsumerState<_PinOverlay> {
     final authState = ref.watch(centralAuthProvider);
     final hasError = authState is CentralPinError;
     final errorMessage = authState is CentralPinError ? authState.message : null;
-    final connectivity = ref.watch(connectivityProvider);
-    final isOnline = connectivity.valueOrNull ?? false;
+    final networkStatus = ref.watch(networkStatusProvider);
 
     ref.listen(centralAuthProvider, (_, next) {
       if (next is CentralPinError) {
@@ -846,7 +851,7 @@ class _PinOverlayState extends ConsumerState<_PinOverlay> {
           SafeArea(
             child: Column(
               children: [
-                _ConnectivityBanner(isOnline: isOnline),
+                _ConnectivityBanner(networkStatus: networkStatus),
                 Expanded(
                   child: Center(
                     child: ConstrainedBox(
@@ -1141,30 +1146,47 @@ class _EscapeButton extends StatelessWidget {
 // ── Connectivity banner ──────────────────────────────────────────────────────
 
 class _ConnectivityBanner extends StatelessWidget {
-  const _ConnectivityBanner({required this.isOnline});
+  const _ConnectivityBanner({required this.networkStatus});
 
-  final bool isOnline;
+  final NetworkStatus networkStatus;
 
   @override
   Widget build(BuildContext context) {
+    final (bgColor, iconData, iconColor, label) = switch (networkStatus) {
+      NetworkStatus.online => (
+          const Color(0xFF1A3A28),
+          Icons.wifi_rounded,
+          AppColors.success,
+          'Online',
+        ),
+      NetworkStatus.limited => (
+          const Color(0xFF3A2D0A),
+          Icons.wifi_rounded,
+          AppColors.warning,
+          'Wi-Fi conectado — servidor inacessível',
+        ),
+      NetworkStatus.offline => (
+          const Color(0xFF3A1A1A),
+          Icons.wifi_off_rounded,
+          AppColors.error,
+          'Sem conexão — modo offline',
+        ),
+    };
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       height: 28,
-      color: isOnline ? const Color(0xFF1A3A28) : const Color(0xFF3A1A1A),
+      color: bgColor,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            isOnline ? Icons.wifi_rounded : Icons.wifi_off_rounded,
-            size: 14,
-            color: isOnline ? AppColors.success : AppColors.error,
-          ),
+          Icon(iconData, size: 14, color: iconColor),
           const SizedBox(width: 6),
           Text(
-            isOnline ? 'Online' : 'Sem conexão — modo offline',
+            label,
             style: TextStyle(
               fontSize: 12,
-              color: isOnline ? AppColors.success : AppColors.error,
+              color: iconColor,
               fontWeight: FontWeight.w500,
             ),
           ),

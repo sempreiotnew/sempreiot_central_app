@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/connectivity/connectivity_provider.dart';
+import '../../../../core/connectivity/connectivity_provider.dart'; // NetworkStatus + networkStatusProvider
 import '../../../../core/theme/app_colors.dart';
 import '../../../../presentation/widgets/iot_network_animation.dart';
 import '../../application/central_auth_provider.dart';
@@ -43,8 +43,7 @@ class _CentralPinScreenState extends ConsumerState<CentralPinScreen> {
     final authState = ref.watch(centralAuthProvider);
     final hasError = authState is CentralPinError;
     final errorMessage = authState is CentralPinError ? authState.message : null;
-    final connectivity = ref.watch(connectivityProvider);
-    final isOnline = connectivity.valueOrNull ?? false;
+    final networkStatus = ref.watch(networkStatusProvider);
 
     ref.listen(centralAuthProvider, (_, next) {
       if (next is CentralPinError) {
@@ -62,7 +61,7 @@ class _CentralPinScreenState extends ConsumerState<CentralPinScreen> {
           SafeArea(
             child: Column(
               children: [
-                _ConnectivityBanner(isOnline: isOnline),
+                _ConnectivityBanner(networkStatus: networkStatus),
                 Expanded(
                   child: Center(
                     child: ConstrainedBox(
@@ -97,29 +96,46 @@ class _CentralPinScreenState extends ConsumerState<CentralPinScreen> {
 // ── Connectivity banner ──────────────────────────────────────────────────────
 
 class _ConnectivityBanner extends StatelessWidget {
-  const _ConnectivityBanner({required this.isOnline});
-  final bool isOnline;
+  const _ConnectivityBanner({required this.networkStatus});
+  final NetworkStatus networkStatus;
 
   @override
   Widget build(BuildContext context) {
+    final (bgColor, iconData, iconColor, label) = switch (networkStatus) {
+      NetworkStatus.online => (
+          const Color(0xFF1A3A28),
+          Icons.wifi_rounded,
+          const Color(0xFF52B788),
+          'Online',
+        ),
+      NetworkStatus.limited => (
+          const Color(0xFF3A2D0A),
+          Icons.wifi_rounded,
+          const Color(0xFFF59E0B),
+          'Wi-Fi conectado — servidor inacessível',
+        ),
+      NetworkStatus.offline => (
+          const Color(0xFF3A1A1A),
+          Icons.wifi_off_rounded,
+          Colors.red,
+          'Sem conexão — modo offline',
+        ),
+    };
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       height: 28,
-      color: isOnline ? const Color(0xFF1A3A28) : const Color(0xFF3A1A1A),
+      color: bgColor,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            isOnline ? Icons.wifi_rounded : Icons.wifi_off_rounded,
-            size: 14,
-            color: isOnline ? const Color(0xFF52B788) : Colors.red.shade400,
-          ),
+          Icon(iconData, size: 14, color: iconColor),
           const SizedBox(width: 6),
           Text(
-            isOnline ? 'Online' : 'Sem conexão — modo offline',
+            label,
             style: TextStyle(
               fontSize: 12,
-              color: isOnline ? const Color(0xFF52B788) : Colors.red.shade400,
+              color: iconColor,
               fontWeight: FontWeight.w500,
             ),
           ),

@@ -5,13 +5,19 @@ import '../../../../core/connectivity/connectivity_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../application/central_auth_provider.dart';
 
+
 class CentralMainScreen extends ConsumerWidget {
   const CentralMainScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final connectivity = ref.watch(connectivityProvider);
-    final isOnline = connectivity.valueOrNull ?? false;
+    final networkStatus = ref.watch(networkStatusProvider);
+
+    final (wifiIcon, wifiColor) = switch (networkStatus) {
+      NetworkStatus.online  => (Icons.wifi_rounded,     const Color(0xFF52B788)),
+      NetworkStatus.limited => (Icons.wifi_rounded,     AppColors.warning),
+      NetworkStatus.offline => (Icons.wifi_off_rounded, Colors.red),
+    };
 
     return Scaffold(
       backgroundColor: AppColors.backgroundDark,
@@ -29,11 +35,7 @@ class CentralMainScreen extends ConsumerWidget {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: Icon(
-              isOnline ? Icons.wifi_rounded : Icons.wifi_off_rounded,
-              color: isOnline ? const Color(0xFF52B788) : Colors.red.shade400,
-              size: 20,
-            ),
+            child: Icon(wifiIcon, color: wifiColor, size: 20),
           ),
           IconButton(
             icon: const Icon(Icons.lock_outline_rounded, color: AppColors.textSecondaryDark),

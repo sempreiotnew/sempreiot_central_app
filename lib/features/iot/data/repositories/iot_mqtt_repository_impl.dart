@@ -39,6 +39,7 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
   int _generation = 0;
   StreamController<({String topic, String payload})>? _publishCtrl;
   Timer? _pingTimer;
+  Timer? _pingRespTimer;
   Completer<void>? _connackCompleter;
   bool _connackReceived = false;
   bool _connected = false;
@@ -67,6 +68,8 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
     _subscription = null;
     _pingTimer?.cancel();
     _pingTimer = null;
+    _pingRespTimer?.cancel();
+    _pingRespTimer = null;
     _connected = false;
     _connectedAt = null; // reset so age-check in _onDone is always fresh
     try { _channel?.sink.close(); } catch (_) {}
@@ -122,7 +125,14 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
     debugPrint('[IoT] MQTT connected ✓');
 
     _pingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (_connected) _channel?.sink.add(Uint8List.fromList(const [0xC0, 0x00]));
+      if (!_connected) return;
+      _channel?.sink.add(Uint8List.fromList(const [0xC0, 0x00]));
+      _pingRespTimer?.cancel();
+      final pingGen = _generation;
+      _pingRespTimer = Timer(
+        const Duration(seconds: 10),
+        () => _onPingTimeout(pingGen),
+      );
     });
   }
 
@@ -133,6 +143,8 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
     _credentialsService.reset();
     _pingTimer?.cancel();
     _pingTimer = null;
+    _pingRespTimer?.cancel();
+    _pingRespTimer = null;
     try {
       _channel?.sink.add(Uint8List.fromList(const [0xE0, 0x00]));
     } catch (_) {}
@@ -191,10 +203,16 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
     }
 
     if (type == 3) _handlePublish(data);
+    if (type == 13) {
+      _pingRespTimer?.cancel();
+      _pingRespTimer = null;
+    }
   }
 
   void _onError(Object error) {
     debugPrint('[IoT] connection error: $error');
+    _pingRespTimer?.cancel();
+    _pingRespTimer = null;
     _connected = false;
     if (!(_connackCompleter?.isCompleted ?? true)) {
       _connackCompleter?.completeError(error);
@@ -204,6 +222,8 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
 
   void _onDone() {
     debugPrint('[IoT] connection closed');
+    _pingRespTimer?.cancel();
+    _pingRespTimer = null;
     final wasConnected = _connected;
     final connectedAt = _connectedAt;
     _connected = false;
@@ -233,6 +253,21 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
       // Channel closed before CONNACK — fail fast instead of waiting for timeout
       _connackCompleter!.completeError(StateError('Connection closed during handshake'));
     }
+  }
+
+  void _onPingTimeout(int gen) {
+    if (gen != _generation) return;
+    debugPrint('[IoT] PINGRESP timeout — network unreachable, treating as disconnect');
+    _pingRespTimer = null;
+    _pingTimer?.cancel();
+    _pingTimer = null;
+    _connected = false;
+    _connectedAt = null;
+    _publishCtrl?.close();
+    _publishCtrl = null;
+    _subscription?.cancel();
+    _subscription = null;
+    _onDisconnected?.call();
   }
 
   void _handlePublish(Uint8List data) {

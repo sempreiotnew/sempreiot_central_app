@@ -107,26 +107,38 @@ class WifiIndicator extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final conn = ref.watch(connectivityProvider);
-    final online = conn.valueOrNull ?? false;
-    final loading = conn.isLoading;
+    final loading = ref.watch(connectivityProvider).isLoading;
+    final status = loading
+        ? NetworkStatus.online
+        : ref.watch(networkStatusProvider);
 
-    final color = loading
-        ? AppColors.warning
-        : online
-            ? AppColors.success
-            : AppColors.error;
+    final (icon, color, tooltip, pulse) = switch (status) {
+      NetworkStatus.online => (
+          Icons.wifi_rounded,
+          AppColors.success,
+          'Rede e servidor conectados',
+          true,
+        ),
+      NetworkStatus.limited => (
+          Icons.wifi_rounded,
+          AppColors.warning,
+          'Wi-Fi conectado — servidor inacessível',
+          false,
+        ),
+      NetworkStatus.offline => (
+          Icons.wifi_off_rounded,
+          AppColors.error,
+          'Sem conexão de rede',
+          false,
+        ),
+    };
 
     return _StatusIcon(
-      icon: online ? Icons.wifi_rounded : Icons.wifi_off_rounded,
-      iconColor: color,
-      dotColor: color,
-      pulse: online && !loading,
-      tooltip: loading
-          ? 'Verificando rede...'
-          : online
-              ? 'Rede conectada'
-              : 'Sem conexão de rede',
+      icon: icon,
+      iconColor: loading ? AppColors.warning : color,
+      dotColor: loading ? AppColors.warning : color,
+      pulse: loading ? false : pulse,
+      tooltip: loading ? 'Verificando rede...' : tooltip,
     );
   }
 }
