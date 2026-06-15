@@ -7,6 +7,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/theme_ext.dart';
 import '../../../features/auth/application/auth_provider.dart';
 import '../../../features/central/application/central_auth_provider.dart';
+import '../../../features/central/application/central_iot_provider.dart';
 import '../../widgets/iot_network_animation.dart';
 import '../auth/login_screen.dart';
 import 'main_tab.dart';
@@ -24,7 +25,7 @@ class MainScreen extends ConsumerStatefulWidget {
 class _MainScreenState extends ConsumerState<MainScreen> {
   MainTab _currentTab = MainTab.principal;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
-  bool _pinOverlayVisible = false;
+  bool _pinOverlayVisible = AppConfig.isCentral;
 
   @override
   Widget build(BuildContext context) {
@@ -193,7 +194,9 @@ class _PrincipalTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final networkStatus = ref.watch(networkStatusProvider);
+    final networkStatus = AppConfig.isCentral
+        ? ref.watch(centralNetworkStatusProvider)
+        : ref.watch(networkStatusProvider);
     return AppConfig.isCentral
         ? _CentralDashboard(networkStatus: networkStatus)
         : _AppDashboard(networkStatus: networkStatus);
@@ -833,7 +836,7 @@ class _PinOverlayState extends ConsumerState<_PinOverlay> {
     final authState = ref.watch(centralAuthProvider);
     final hasError = authState is CentralPinError;
     final errorMessage = authState is CentralPinError ? authState.message : null;
-    final networkStatus = ref.watch(networkStatusProvider);
+    final networkStatus = ref.watch(centralNetworkStatusProvider);
 
     ref.listen(centralAuthProvider, (_, next) {
       if (next is CentralPinError) {

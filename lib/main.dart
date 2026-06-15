@@ -15,10 +15,8 @@ import 'presentation/screens/splash/splash_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (AppConfig.isApp) {
-    await dotenv.load();
-    await _configureAmplify();
-  }
+  await dotenv.load();
+  await _configureAmplify(); // Both modes need Amplify Auth
   runApp(const ProviderScope(child: SempreIoTApp()));
 }
 

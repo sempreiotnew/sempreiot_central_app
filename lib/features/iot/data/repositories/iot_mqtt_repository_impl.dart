@@ -22,11 +22,19 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
   // the old notifier sees the disconnect, reschedules a connect, kicks the new
   // socket, and the loop repeats indefinitely.
   static IotMqttRepositoryImpl? _shared;
+  static IotMqttRepositoryImpl? _centralShared;
 
   factory IotMqttRepositoryImpl({IotCredentialsService? credentialsService}) {
     return _shared ??= IotMqttRepositoryImpl._internal(
       credentialsService ?? IotCredentialsService(),
     );
+  }
+
+  /// Separate singleton for the Central device.
+  /// Accepts any [IotCredentialsService] subclass — callers pass
+  /// [CentralCredentialsService] without creating a dependency here.
+  factory IotMqttRepositoryImpl.forCentral({required IotCredentialsService credentialsService}) {
+    return _centralShared ??= IotMqttRepositoryImpl._internal(credentialsService);
   }
 
   IotMqttRepositoryImpl._internal(this._credentialsService);

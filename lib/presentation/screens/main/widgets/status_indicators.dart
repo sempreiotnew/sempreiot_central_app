@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../../../core/connectivity/connectivity_provider.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../features/central/application/central_iot_provider.dart';
 import '../../../../features/iot/application/iot_provider.dart';
 
 class _PulsingDot extends StatefulWidget {
@@ -110,7 +112,9 @@ class WifiIndicator extends ConsumerWidget {
     final loading = ref.watch(connectivityProvider).isLoading;
     final status = loading
         ? NetworkStatus.online
-        : ref.watch(networkStatusProvider);
+        : AppConfig.isCentral
+            ? ref.watch(centralNetworkStatusProvider)
+            : ref.watch(networkStatusProvider);
 
     final (icon, color, tooltip, pulse) = switch (status) {
       NetworkStatus.online => (

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/connectivity/connectivity_provider.dart';
+import '../../application/central_iot_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../application/central_auth_provider.dart';
 
@@ -11,7 +11,7 @@ class CentralMainScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final networkStatus = ref.watch(networkStatusProvider);
+    final networkStatus = ref.watch(centralNetworkStatusProvider);
 
     final (wifiIcon, wifiColor) = switch (networkStatus) {
       NetworkStatus.online  => (Icons.wifi_rounded,     const Color(0xFF52B788)),

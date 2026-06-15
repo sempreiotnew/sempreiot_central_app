@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/connectivity/connectivity_provider.dart'; // NetworkStatus + networkStatusProvider
+import '../../application/central_iot_provider.dart'; // NetworkStatus + centralNetworkStatusProvider
 import '../../../../core/theme/app_colors.dart';
 import '../../../../presentation/widgets/iot_network_animation.dart';
 import '../../application/central_auth_provider.dart';
@@ -43,7 +43,7 @@ class _CentralPinScreenState extends ConsumerState<CentralPinScreen> {
     final authState = ref.watch(centralAuthProvider);
     final hasError = authState is CentralPinError;
     final errorMessage = authState is CentralPinError ? authState.message : null;
-    final networkStatus = ref.watch(networkStatusProvider);
+    final networkStatus = ref.watch(centralNetworkStatusProvider);
 
     ref.listen(centralAuthProvider, (_, next) {
       if (next is CentralPinError) {
