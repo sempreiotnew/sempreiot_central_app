@@ -62,7 +62,7 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
               const UsbIndicator(),
             ],
             const SizedBox(width: 2),
-            MqttIndicator(disabled: AppConfig.isCentral),
+            const MqttIndicator(),
             if (AppConfig.isCentral) ...[
               const SizedBox(width: 2),
               AnimatedSwitcher(

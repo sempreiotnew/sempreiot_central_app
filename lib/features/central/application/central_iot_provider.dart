@@ -115,18 +115,3 @@ class CentralIotConnectionNotifier extends AsyncNotifier<bool> {
   }
 }
 
-/// Network status for the Central device — tracks the machine MQTT session
-/// independently of the UI lock state.
-final centralNetworkStatusProvider = Provider<NetworkStatus>((ref) {
-  final connState = ref.watch(connectivityProvider);
-  if (connState.isLoading) return NetworkStatus.online;
-
-  final hasInterface = connState.valueOrNull ?? false;
-  if (!hasInterface) return NetworkStatus.offline;
-
-  final iotState = ref.watch(centralIotConnectionProvider);
-  if (iotState.valueOrNull == true) return NetworkStatus.online;
-  if (iotState.hasError || iotState.valueOrNull == false) return NetworkStatus.limited;
-
-  return NetworkStatus.online;
-});

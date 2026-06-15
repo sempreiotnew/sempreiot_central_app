@@ -7,7 +7,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/theme_ext.dart';
 import '../../../features/auth/application/auth_provider.dart';
 import '../../../features/central/application/central_auth_provider.dart';
-import '../../../features/central/application/central_iot_provider.dart';
+import '../../../core/connectivity/network_status_provider.dart';
 import '../../widgets/iot_network_animation.dart';
 import '../auth/login_screen.dart';
 import 'main_tab.dart';
@@ -32,11 +32,13 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     final isLocked = AppConfig.isCentral &&
         ref.watch(centralAuthProvider) is! CentralAuthenticated;
 
-    ref.listen(centralAuthProvider, (_, next) {
+    ref.listen(centralAuthProvider, (prev, next) {
       if (next is CentralAuthenticated && _pinOverlayVisible) {
         setState(() => _pinOverlayVisible = false);
       }
-      if (next is CentralUnauthenticated) {
+      // Only hide the PIN overlay on explicit lock (prev was Authenticated),
+      // not after a failed attempt (prev was CentralPinError → reset()).
+      if (next is CentralUnauthenticated && prev is! CentralPinError) {
         setState(() {
           _pinOverlayVisible = false;
           _currentTab = MainTab.principal;
@@ -194,9 +196,7 @@ class _PrincipalTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final networkStatus = AppConfig.isCentral
-        ? ref.watch(centralNetworkStatusProvider)
-        : ref.watch(networkStatusProvider);
+    final networkStatus = ref.watch(networkStatusProvider);
     return AppConfig.isCentral
         ? _CentralDashboard(networkStatus: networkStatus)
         : _AppDashboard(networkStatus: networkStatus);
@@ -836,7 +836,7 @@ class _PinOverlayState extends ConsumerState<_PinOverlay> {
     final authState = ref.watch(centralAuthProvider);
     final hasError = authState is CentralPinError;
     final errorMessage = authState is CentralPinError ? authState.message : null;
-    final networkStatus = ref.watch(centralNetworkStatusProvider);
+    final networkStatus = ref.watch(networkStatusProvider);
 
     ref.listen(centralAuthProvider, (_, next) {
       if (next is CentralPinError) {

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/config/app_config.dart';
 import '../../../../core/connectivity/connectivity_provider.dart';
+import '../../../../core/connectivity/network_status_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../features/central/application/central_iot_provider.dart';
 import '../../../../features/iot/application/iot_provider.dart';
@@ -110,11 +111,7 @@ class WifiIndicator extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final loading = ref.watch(connectivityProvider).isLoading;
-    final status = loading
-        ? NetworkStatus.online
-        : AppConfig.isCentral
-            ? ref.watch(centralNetworkStatusProvider)
-            : ref.watch(networkStatusProvider);
+    final status = loading ? NetworkStatus.online : ref.watch(networkStatusProvider);
 
     final (icon, color, tooltip, pulse) = switch (status) {
       NetworkStatus.online => (
@@ -148,23 +145,13 @@ class WifiIndicator extends ConsumerWidget {
 }
 
 class MqttIndicator extends ConsumerWidget {
-  const MqttIndicator({super.key, this.disabled = false});
-
-  final bool disabled;
+  const MqttIndicator({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (disabled) {
-      return _StatusIcon(
-        icon: Icons.cloud_off_rounded,
-        iconColor: AppColors.textSecondaryDark.withValues(alpha: 0.3),
-        dotColor: AppColors.textSecondaryDark.withValues(alpha: 0.3),
-        pulse: false,
-        tooltip: 'Servidor MQTT não disponível neste modo',
-      );
-    }
-
-    final iot = ref.watch(iotConnectionProvider);
+    final iot = AppConfig.isCentral
+        ? ref.watch(centralIotConnectionProvider)
+        : ref.watch(iotConnectionProvider);
     final connected = iot.valueOrNull ?? false;
     final loading = iot.isLoading;
 
