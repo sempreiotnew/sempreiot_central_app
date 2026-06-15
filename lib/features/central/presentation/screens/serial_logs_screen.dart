@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -25,18 +27,21 @@ class _SerialLogsScreenState extends ConsumerState<SerialLogsScreen> {
   }
 
   void _addData(Uint8List data) {
-    final raw = String.fromCharCodes(data);
-    final lines = raw
-        .split(RegExp(r'\r?\n'))
-        .map((l) => l.trimRight())
-        .where((l) => l.isNotEmpty)
-        .toList();
-    if (lines.isEmpty) return;
+    final raw = String.fromCharCodes(data).trim();
+    if (raw.isEmpty) return;
+
+    dynamic parsed;
+    try {
+      parsed = jsonDecode(raw);
+    } catch (_) {
+      debugPrint('[Serial] Ignored (invalid JSON): $raw');
+      return;
+    }
+
+    final display = jsonEncode(parsed);
 
     setState(() {
-      for (final line in lines) {
-        _entries.add(_LogEntry(DateTime.now(), line));
-      }
+      _entries.add(_LogEntry(DateTime.now(), display));
       if (_entries.length > _maxEntries) {
         _entries.removeRange(0, _entries.length - _maxEntries);
       }

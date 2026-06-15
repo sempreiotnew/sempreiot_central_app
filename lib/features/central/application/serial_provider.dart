@@ -16,6 +16,7 @@ class SerialNotifier extends StateNotifier<SerialStatus> {
   StreamSubscription<UsbEvent>? _usbEventSub;
   StreamSubscription<Uint8List?>? _inputSub;
   UsbPort? _port;
+  final _lineBuffer = StringBuffer();
   final _dataController = StreamController<Uint8List>.broadcast();
 
   Stream<Uint8List> get dataStream => _dataController.stream;
@@ -91,9 +92,21 @@ class SerialNotifier extends StateNotifier<SerialStatus> {
       _inputSub = port.inputStream?.listen(
         (Uint8List? data) {
           if (data == null || data.isEmpty) return;
-          final text = String.fromCharCodes(data);
-          debugPrint('[Serial] RX: $text');
-          if (!_dataController.isClosed) _dataController.add(data);
+          _lineBuffer.write(String.fromCharCodes(data));
+          final buffered = _lineBuffer.toString();
+          final parts = buffered.split('\n');
+          // Keep the last (possibly incomplete) fragment for the next chunk
+          _lineBuffer
+            ..clear()
+            ..write(parts.last);
+          for (var i = 0; i < parts.length - 1; i++) {
+            final line = parts[i].trimRight();
+            if (line.isEmpty) continue;
+            debugPrint('[Serial] RX: $line');
+            if (!_dataController.isClosed) {
+              _dataController.add(Uint8List.fromList(line.codeUnits));
+            }
+          }
         },
         onError: (Object err) {
           debugPrint('[Serial] Stream error: $err');
@@ -119,6 +132,7 @@ class SerialNotifier extends StateNotifier<SerialStatus> {
     _inputSub = null;
     try { _port?.close(); } catch (_) {}
     _port = null;
+    _lineBuffer.clear();
     if (mounted) state = SerialStatus.disconnected;
   }
 
