@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-const _kDefaultPin = '4294';
+const _kDefaultPin = '428412';
 
 sealed class CentralAuthState {
   const CentralAuthState();

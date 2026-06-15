@@ -810,9 +810,9 @@ class _PinOverlayState extends ConsumerState<_PinOverlay> {
   }
 
   void _onDigit(String d) {
-    if (_digits.length >= 4) return;
+    if (_digits.length >= 6) return;
     setState(() => _digits.add(d));
-    if (_digits.length == 4) {
+    if (_digits.length == 6) {
       ref.read(centralAuthProvider.notifier).verify(_digits.join());
     }
   }
@@ -846,6 +846,23 @@ class _PinOverlayState extends ConsumerState<_PinOverlay> {
       }
     });
 
+    final dots = _PinDots(filledCount: _digits.length, hasError: hasError);
+    final numpad = _Numpad(onDigit: _onDigit, onDelete: _onDelete);
+    final errorLabel = _ErrorLabel(message: errorMessage);
+    final escapeBtn = TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: _escapeVisible ? 1.0 : 0.0),
+      duration: const Duration(milliseconds: 450),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) => Opacity(
+        opacity: value,
+        child: Transform.translate(
+          offset: Offset(0, 14 * (1 - value)),
+          child: child,
+        ),
+      ),
+      child: _EscapeButton(onTap: widget.onDismiss),
+    );
+
     return Scaffold(
       backgroundColor: AppColors.backgroundDark,
       body: Stack(
@@ -856,45 +873,68 @@ class _PinOverlayState extends ConsumerState<_PinOverlay> {
               children: [
                 _ConnectivityBanner(networkStatus: networkStatus),
                 Expanded(
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 360),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 32),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                  child: OrientationBuilder(
+                    builder: (context, orientation) {
+                      if (orientation == Orientation.landscape) {
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            const _PinHeader(),
-                            const SizedBox(height: 48),
-                            _PinDots(
-                              filledCount: _digits.length,
-                              hasError: hasError,
-                            ),
-                            const SizedBox(height: 12),
-                            _ErrorLabel(message: errorMessage),
-                            const SizedBox(height: 40),
-                            _Numpad(onDigit: _onDigit, onDelete: _onDelete),
-                            const SizedBox(height: 28),
-                            TweenAnimationBuilder<double>(
-                              tween: Tween(
-                                begin: 0.0,
-                                end: _escapeVisible ? 1.0 : 0.0,
+                            Expanded(
+                              flex: 45,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const _PinHeader(showIcon: false),
+                                  const SizedBox(height: 10),
+                                  dots,
+                                  const SizedBox(height: 6),
+                                  errorLabel,
+                                  const SizedBox(height: 10),
+                                  escapeBtn,
+                                ],
                               ),
-                              duration: const Duration(milliseconds: 450),
-                              curve: Curves.easeOutCubic,
-                              builder: (context, value, child) => Opacity(
-                                opacity: value,
-                                child: Transform.translate(
-                                  offset: Offset(0, 14 * (1 - value)),
-                                  child: child,
+                            ),
+                            Container(
+                              width: 1,
+                              margin: const EdgeInsets.symmetric(vertical: 24),
+                              color: AppColors.divider.withValues(alpha: 0.25),
+                            ),
+                            Expanded(
+                              flex: 55,
+                              child: Center(
+                                child: _Numpad(
+                                  onDigit: _onDigit,
+                                  onDelete: _onDelete,
+                                  compact: true,
                                 ),
                               ),
-                              child: _EscapeButton(onTap: widget.onDismiss),
                             ),
                           ],
+                        );
+                      }
+                      return Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 360),
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const _PinHeader(),
+                                const SizedBox(height: 48),
+                                dots,
+                                const SizedBox(height: 12),
+                                errorLabel,
+                                const SizedBox(height: 40),
+                                numpad,
+                                const SizedBox(height: 28),
+                                escapeBtn,
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
+                      );
+                    },
                   ),
                 ),
               ],
@@ -907,33 +947,37 @@ class _PinOverlayState extends ConsumerState<_PinOverlay> {
 }
 
 class _PinHeader extends StatelessWidget {
-  const _PinHeader();
+  const _PinHeader({this.showIcon = true});
+
+  final bool showIcon;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Container(
-          width: 64,
-          height: 64,
-          decoration: BoxDecoration(
-            color: AppColors.secondary.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: AppColors.secondary.withValues(alpha: 0.3),
+        if (showIcon) ...[
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: AppColors.secondary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: AppColors.secondary.withValues(alpha: 0.3),
+              ),
+            ),
+            child: const Icon(
+              Icons.lock_outline_rounded,
+              color: AppColors.secondary,
+              size: 30,
             ),
           ),
-          child: const Icon(
-            Icons.lock_outline_rounded,
-            color: AppColors.secondary,
-            size: 30,
-          ),
-        ),
-        const SizedBox(height: 20),
-        const Text(
+          const SizedBox(height: 20),
+        ],
+        Text(
           'Central SempreIoT',
           style: TextStyle(
-            fontSize: 22,
+            fontSize: showIcon ? 22 : 20,
             fontWeight: FontWeight.w700,
             color: AppColors.textPrimaryDark,
             letterSpacing: -0.4,
@@ -962,7 +1006,7 @@ class _PinDots extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(4, (i) {
+      children: List.generate(6, (i) {
         final filled = i < filledCount;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 150),
@@ -1010,10 +1054,11 @@ class _ErrorLabel extends StatelessWidget {
 }
 
 class _Numpad extends StatelessWidget {
-  const _Numpad({required this.onDigit, required this.onDelete});
+  const _Numpad({required this.onDigit, required this.onDelete, this.compact = false});
 
   final void Function(String) onDigit;
   final VoidCallback onDelete;
+  final bool compact;
 
   static const _keys = [
     ['1', '2', '3'],
@@ -1024,30 +1069,37 @@ class _Numpad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final rowGap = compact ? 8.0 : 12.0;
+    final emptyW = compact ? 68.0 : 80.0;
+    final emptyH = compact ? 50.0 : 64.0;
+
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: _keys.map((row) {
         return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
+          padding: EdgeInsets.only(bottom: rowGap),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: row.map((key) {
-              if (key.isEmpty) return const SizedBox(width: 80, height: 64);
+              if (key.isEmpty) return SizedBox(width: emptyW, height: emptyH);
               if (key == 'del') {
                 return _NumpadKey(
                   onTap: onDelete,
-                  child: const Icon(
+                  compact: compact,
+                  child: Icon(
                     Icons.backspace_outlined,
                     color: AppColors.textSecondaryDark,
-                    size: 20,
+                    size: compact ? 16 : 20,
                   ),
                 );
               }
               return _NumpadKey(
                 onTap: () => onDigit(key),
+                compact: compact,
                 child: Text(
                   key,
-                  style: const TextStyle(
-                    fontSize: 24,
+                  style: TextStyle(
+                    fontSize: compact ? 20.0 : 24.0,
                     fontWeight: FontWeight.w400,
                     color: AppColors.textPrimaryDark,
                   ),
@@ -1062,26 +1114,32 @@ class _Numpad extends StatelessWidget {
 }
 
 class _NumpadKey extends StatelessWidget {
-  const _NumpadKey({required this.child, required this.onTap});
+  const _NumpadKey({required this.child, required this.onTap, this.compact = false});
 
   final Widget child;
   final VoidCallback onTap;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    final w = compact ? 58.0 : 72.0;
+    final h = compact ? 50.0 : 64.0;
+    final hPad = compact ? 8.0 : 10.0;
+    final radius = compact ? 12.0 : 16.0;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      padding: EdgeInsets.symmetric(horizontal: hPad),
       child: Material(
         color: AppColors.surfaceDark.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(radius),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(radius),
           child: Container(
-            width: 72,
-            height: 64,
+            width: w,
+            height: h,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(radius),
               border: Border.all(color: AppColors.divider),
             ),
             alignment: Alignment.center,
