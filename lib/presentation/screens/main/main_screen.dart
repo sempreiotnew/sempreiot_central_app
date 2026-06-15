@@ -901,12 +901,26 @@ class _PinOverlayState extends ConsumerState<_PinOverlay> {
                             ),
                             Expanded(
                               flex: 55,
-                              child: Center(
-                                child: _Numpad(
-                                  onDigit: _onDigit,
-                                  onDelete: _onDelete,
-                                  compact: true,
-                                ),
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final availH = constraints.maxHeight;
+                                  final availW = constraints.maxWidth;
+                                  // Fill ~85% of height across 4 rows
+                                  final rowGap = (availH * 0.03).clamp(6.0, 16.0);
+                                  final keyH = ((availH * 0.85) - rowGap * 4) / 4;
+                                  // Each slot = keyW + 2*hPad; hPad = keyW*0.13
+                                  // 3 slots fill ~88% of width => keyW = availW*0.88 / (3*1.26)
+                                  final keyW = (availW * 0.88) / (3 * 1.26);
+                                  return Center(
+                                    child: _Numpad(
+                                      onDigit: _onDigit,
+                                      onDelete: _onDelete,
+                                      keyWidth: keyW.clamp(44.0, 96.0),
+                                      keyHeight: keyH.clamp(40.0, 82.0),
+                                      rowGap: rowGap,
+                                    ),
+                                  );
+                                },
                               ),
                             ),
                           ],
@@ -1054,11 +1068,19 @@ class _ErrorLabel extends StatelessWidget {
 }
 
 class _Numpad extends StatelessWidget {
-  const _Numpad({required this.onDigit, required this.onDelete, this.compact = false});
+  const _Numpad({
+    required this.onDigit,
+    required this.onDelete,
+    this.keyWidth = 72,
+    this.keyHeight = 64,
+    this.rowGap = 12,
+  });
 
   final void Function(String) onDigit;
   final VoidCallback onDelete;
-  final bool compact;
+  final double keyWidth;
+  final double keyHeight;
+  final double rowGap;
 
   static const _keys = [
     ['1', '2', '3'],
@@ -1069,9 +1091,10 @@ class _Numpad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rowGap = compact ? 8.0 : 12.0;
-    final emptyW = compact ? 68.0 : 80.0;
-    final emptyH = compact ? 50.0 : 64.0;
+    final hPad = (keyWidth * 0.13).clamp(6.0, 12.0);
+    final slotW = keyWidth + hPad * 2;
+    final fontSize = (keyHeight * 0.38).clamp(16.0, 28.0);
+    final iconSize = (keyHeight * 0.30).clamp(14.0, 22.0);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1081,25 +1104,27 @@ class _Numpad extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: row.map((key) {
-              if (key.isEmpty) return SizedBox(width: emptyW, height: emptyH);
+              if (key.isEmpty) return SizedBox(width: slotW, height: keyHeight);
               if (key == 'del') {
                 return _NumpadKey(
                   onTap: onDelete,
-                  compact: compact,
+                  width: keyWidth,
+                  height: keyHeight,
                   child: Icon(
                     Icons.backspace_outlined,
                     color: AppColors.textSecondaryDark,
-                    size: compact ? 16 : 20,
+                    size: iconSize,
                   ),
                 );
               }
               return _NumpadKey(
                 onTap: () => onDigit(key),
-                compact: compact,
+                width: keyWidth,
+                height: keyHeight,
                 child: Text(
                   key,
                   style: TextStyle(
-                    fontSize: compact ? 20.0 : 24.0,
+                    fontSize: fontSize,
                     fontWeight: FontWeight.w400,
                     color: AppColors.textPrimaryDark,
                   ),
@@ -1114,18 +1139,22 @@ class _Numpad extends StatelessWidget {
 }
 
 class _NumpadKey extends StatelessWidget {
-  const _NumpadKey({required this.child, required this.onTap, this.compact = false});
+  const _NumpadKey({
+    required this.child,
+    required this.onTap,
+    this.width = 72,
+    this.height = 64,
+  });
 
   final Widget child;
   final VoidCallback onTap;
-  final bool compact;
+  final double width;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
-    final w = compact ? 58.0 : 72.0;
-    final h = compact ? 50.0 : 64.0;
-    final hPad = compact ? 8.0 : 10.0;
-    final radius = compact ? 12.0 : 16.0;
+    final hPad = (width * 0.13).clamp(6.0, 12.0);
+    final radius = (height * 0.22).clamp(10.0, 18.0);
 
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: hPad),
@@ -1136,8 +1165,8 @@ class _NumpadKey extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(radius),
           child: Container(
-            width: w,
-            height: h,
+            width: width,
+            height: height,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(radius),
               border: Border.all(color: AppColors.divider),
