@@ -6,6 +6,7 @@ import '../../../../core/connectivity/connectivity_provider.dart';
 import '../../../../core/connectivity/network_status_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../features/central/application/central_iot_provider.dart';
+import '../../../../features/central/application/serial_provider.dart';
 import '../../../../features/iot/application/iot_provider.dart';
 
 class _PulsingDot extends StatefulWidget {
@@ -175,17 +176,42 @@ class MqttIndicator extends ConsumerWidget {
   }
 }
 
-class UsbIndicator extends StatelessWidget {
+class UsbIndicator extends ConsumerWidget {
   const UsbIndicator({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final status = ref.watch(serialProvider);
+
+    final (color, tooltip, pulse) = switch (status) {
+      SerialStatus.connected => (
+          AppColors.success,
+          'USB — Conectado',
+          true,
+        ),
+      SerialStatus.connecting => (
+          AppColors.warning,
+          'USB — Conectando...',
+          false,
+        ),
+      SerialStatus.error => (
+          AppColors.error,
+          'USB — Erro de conexão',
+          false,
+        ),
+      SerialStatus.disconnected => (
+          AppColors.textSecondaryDark.withValues(alpha: 0.3),
+          'USB — Desconectado',
+          false,
+        ),
+    };
+
     return _StatusIcon(
       icon: Icons.usb_rounded,
-      iconColor: AppColors.textSecondaryDark.withValues(alpha: 0.3),
-      dotColor: AppColors.textSecondaryDark.withValues(alpha: 0.3),
-      pulse: false,
-      tooltip: 'USB — Em desenvolvimento',
+      iconColor: color,
+      dotColor: color,
+      pulse: pulse,
+      tooltip: tooltip,
     );
   }
 }

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/config/app_config.dart';
-import '../../../core/connectivity/connectivity_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/theme_ext.dart';
 import '../../../features/auth/application/auth_provider.dart';
@@ -10,6 +9,7 @@ import '../../../features/central/application/central_auth_provider.dart';
 import '../../../core/connectivity/network_status_provider.dart';
 import '../../widgets/iot_network_animation.dart';
 import '../auth/login_screen.dart';
+import '../../../features/central/presentation/screens/serial_logs_screen.dart';
 import 'main_tab.dart';
 import 'widgets/main_app_bar.dart';
 import 'widgets/main_bottom_nav.dart';
@@ -183,6 +183,7 @@ class _TabBody extends StatelessWidget {
               title: 'Social',
               subtitle: 'Equipes e contatos.',
             ),
+          MainTab.logs => const SerialLogsScreen(),
         },
       ),
     );

@@ -7,10 +7,11 @@ enum MainTab {
   central,
   centrais,
   devices,
-  social;
+  social,
+  logs;
 
   static List<MainTab> get tabs => AppConfig.isCentral
-      ? [principal, central, devices, social]
+      ? [principal, central, devices, logs, social]
       : [principal, centrais, social];
 
   String get label => switch (this) {
@@ -19,6 +20,7 @@ enum MainTab {
         MainTab.centrais => 'Centrais',
         MainTab.devices => 'Dispositivos',
         MainTab.social => 'Social',
+        MainTab.logs => 'Logs',
       };
 
   IconData get icon => switch (this) {
@@ -27,5 +29,6 @@ enum MainTab {
         MainTab.centrais => Icons.hub_rounded,
         MainTab.devices => Icons.devices_rounded,
         MainTab.social => Icons.group_rounded,
+        MainTab.logs => Icons.receipt_long_rounded,
       };
 }
