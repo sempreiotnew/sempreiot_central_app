@@ -27,12 +27,18 @@ dependencies:
   web_socket_channel: ^3.0.3
   connectivity_plus: ^7.1.1
   usb_serial: ^0.5.1
+  drift: ^2.18.0
+  drift_flutter: ^0.2.2
+  sqlite3_flutter_libs: ^0.5.0
+  path_provider: ^2.1.4
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
   flutter_lints: ^2.0.0
+  drift_dev: ^2.18.0
+  build_runner: ^2.4.9
 
 
 flutter:

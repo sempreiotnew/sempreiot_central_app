@@ -6,9 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/config/amplify_config.dart';
 import 'core/config/app_config.dart';
+import 'core/database/app_database.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
 import 'features/app/application/app_init_provider.dart';
+import 'features/central/application/serial_ingest_provider.dart';
 import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/main/main_screen.dart';
 import 'presentation/screens/splash/splash_screen.dart';
@@ -65,9 +67,16 @@ class _AppRoot extends ConsumerWidget {
 // ── CENTRAL mode ──────────────────────────────────────────────────────────────
 // Lock/unlock state is managed inside MainScreen itself.
 
-class _CentralRoot extends StatelessWidget {
+class _CentralRoot extends ConsumerWidget {
   const _CentralRoot();
 
   @override
-  Widget build(BuildContext context) => const MainScreen();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final db = ref.read(appDatabaseProvider);
+    ref.read(serialIngestProvider);
+    db.deleteOlderThan(
+      DateTime.now().toUtc().subtract(const Duration(days: 30)),
+    );
+    return const MainScreen();
+  }
 }

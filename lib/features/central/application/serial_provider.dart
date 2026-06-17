@@ -13,11 +13,16 @@ class SerialNotifier extends StateNotifier<SerialStatus> {
 
   static const _baudRate = 115200;
 
+  static const _packetSize = 11;
+
   StreamSubscription<UsbEvent>? _usbEventSub;
   StreamSubscription<Uint8List?>? _inputSub;
   UsbPort? _port;
-  final _lineBuffer = StringBuffer();
+  String? _connectedDeviceId;
+  final _byteBuffer = <int>[];
   final _dataController = StreamController<Uint8List>.broadcast();
+
+  String? get connectedDeviceId => _connectedDeviceId;
 
   Stream<Uint8List> get dataStream => _dataController.stream;
 
@@ -61,6 +66,7 @@ class SerialNotifier extends StateNotifier<SerialStatus> {
       }
 
       final device = devices.first;
+      _connectedDeviceId = '${device.vid}:${device.pid}';
       debugPrint(
         '[Serial] Found: ${device.productName} '
         '[VID:${device.vid} PID:${device.pid}]',
@@ -92,19 +98,15 @@ class SerialNotifier extends StateNotifier<SerialStatus> {
       _inputSub = port.inputStream?.listen(
         (Uint8List? data) {
           if (data == null || data.isEmpty) return;
-          _lineBuffer.write(String.fromCharCodes(data));
-          final buffered = _lineBuffer.toString();
-          final parts = buffered.split('\n');
-          // Keep the last (possibly incomplete) fragment for the next chunk
-          _lineBuffer
-            ..clear()
-            ..write(parts.last);
-          for (var i = 0; i < parts.length - 1; i++) {
-            final line = parts[i].trimRight();
-            if (line.isEmpty) continue;
-            debugPrint('[Serial] RX: $line');
+          _byteBuffer.addAll(data);
+          while (_byteBuffer.length >= _packetSize) {
+            final packet = Uint8List.fromList(
+              _byteBuffer.sublist(0, _packetSize),
+            );
+            _byteBuffer.removeRange(0, _packetSize);
             if (!_dataController.isClosed) {
-              _dataController.add(Uint8List.fromList(line.codeUnits));
+              debugPrint('[Serial] RX packet: $_packetSize bytes');
+              _dataController.add(packet);
             }
           }
         },
@@ -132,7 +134,8 @@ class SerialNotifier extends StateNotifier<SerialStatus> {
     _inputSub = null;
     try { _port?.close(); } catch (_) {}
     _port = null;
-    _lineBuffer.clear();
+    _connectedDeviceId = null;
+    _byteBuffer.clear();
     if (mounted) state = SerialStatus.disconnected;
   }
 
