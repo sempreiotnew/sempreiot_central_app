@@ -13,7 +13,10 @@ class SerialNotifier extends StateNotifier<SerialStatus> {
 
   static const _baudRate = 115200;
 
-  static const _packetSize = 11;
+  // SAFR framing constants
+  static const _safrSof = 0xA5;
+  static const _safrMinFrame = 42;  // AAD(21) + NONCE(4) + 1 payload + TAG(16)
+  static const _safrMaxFrame = 256; // firmware buffer ceiling
 
   StreamSubscription<UsbEvent>? _usbEventSub;
   StreamSubscription<Uint8List?>? _inputSub;
@@ -99,16 +102,7 @@ class SerialNotifier extends StateNotifier<SerialStatus> {
         (Uint8List? data) {
           if (data == null || data.isEmpty) return;
           _byteBuffer.addAll(data);
-          while (_byteBuffer.length >= _packetSize) {
-            final packet = Uint8List.fromList(
-              _byteBuffer.sublist(0, _packetSize),
-            );
-            _byteBuffer.removeRange(0, _packetSize);
-            if (!_dataController.isClosed) {
-              debugPrint('[Serial] RX packet: $_packetSize bytes');
-              _dataController.add(packet);
-            }
-          }
+          _drainFrames();
         },
         onError: (Object err) {
           debugPrint('[Serial] Stream error: $err');
@@ -126,6 +120,46 @@ class SerialNotifier extends StateNotifier<SerialStatus> {
     } catch (e, st) {
       debugPrint('[Serial] Connection error: $e\n$st');
       if (mounted) state = SerialStatus.error;
+    }
+  }
+
+  // Scans _byteBuffer for complete SAFR frames and emits each one.
+  // Frame boundary: SOF(0xA5) at offset 0, total length at bytes [2..3].
+  void _drainFrames() {
+    while (true) {
+      // 1. Find next SOF byte.
+      final sofIdx = _byteBuffer.indexOf(_safrSof);
+      if (sofIdx < 0) {
+        _byteBuffer.clear();
+        return;
+      }
+      if (sofIdx > 0) {
+        debugPrint('[Serial] Discarding $sofIdx garbage bytes before SOF');
+        _byteBuffer.removeRange(0, sofIdx);
+      }
+
+      // 2. Need at least 4 bytes to read the LEN field.
+      if (_byteBuffer.length < 4) return;
+
+      // 3. Parse total frame length from header bytes [2..3] (big-endian).
+      final frameLen = (_byteBuffer[2] << 8) | _byteBuffer[3];
+      if (frameLen < _safrMinFrame || frameLen > _safrMaxFrame) {
+        // Invalid length — this SOF byte was garbage; skip and retry.
+        debugPrint('[Serial] Invalid SAFR frame length $frameLen, skipping SOF');
+        _byteBuffer.removeAt(0);
+        continue;
+      }
+
+      // 4. Wait until the full frame has arrived.
+      if (_byteBuffer.length < frameLen) return;
+
+      // 5. Extract and emit the complete frame.
+      final frame = Uint8List.fromList(_byteBuffer.sublist(0, frameLen));
+      _byteBuffer.removeRange(0, frameLen);
+      if (!_dataController.isClosed) {
+        debugPrint('[Serial] RX SAFR frame: $frameLen bytes');
+        _dataController.add(frame);
+      }
     }
   }
 
