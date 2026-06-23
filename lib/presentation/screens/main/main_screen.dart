@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -270,6 +272,10 @@ class _CentralDashboard extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          const _SectionLabel('BATERIA'),
+          const SizedBox(height: 8),
+          const _GadgetRow(),
         ],
       ),
     );
@@ -350,6 +356,10 @@ class _AppDashboard extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          const _SectionLabel('BATERIA'),
+          const SizedBox(height: 8),
+          const _GadgetRow(),
         ],
       ),
     );
@@ -720,6 +730,312 @@ class _MetricCard extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
         ),
       ],
+    );
+  }
+}
+
+// ── Gadget row ───────────────────────────────────────────────────────────────
+
+class _GadgetRow extends StatelessWidget {
+  const _GadgetRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: _BatteryGadget(percent: 78)),
+        SizedBox(width: 8),
+        Expanded(child: _TemperatureGadget(celsius: 32)),
+      ],
+    );
+  }
+}
+
+class _BatteryGadget extends StatefulWidget {
+  const _BatteryGadget({this.percent = 78});
+  final int percent;
+
+  @override
+  State<_BatteryGadget> createState() => _BatteryGadgetState();
+}
+
+class _BatteryGadgetState extends State<_BatteryGadget>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    _anim = Tween<double>(begin: 0, end: widget.percent / 100).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic),
+    );
+    _ctrl.forward();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.percent > 50
+        ? AppColors.success
+        : widget.percent > 20
+            ? AppColors.warning
+            : AppColors.error;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.2), width: 0.8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.battery_charging_full_rounded, size: 11, color: color),
+              const SizedBox(width: 5),
+              Text(
+                'BATERIA',
+                style: TextStyle(
+                  color: context.textSecondary,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Center(
+            child: AnimatedBuilder(
+              animation: _anim,
+              builder: (context, _) => CustomPaint(
+                size: const Size(90, 90),
+                painter: _BatteryArcPainter(
+                  progress: _anim.value,
+                  color: color,
+                ),
+                child: SizedBox(
+                  width: 90,
+                  height: 90,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '${(widget.percent * _anim.value).round()}%',
+                        style: TextStyle(
+                          color: context.textPrimary,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                          height: 1,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'carga',
+                        style: TextStyle(
+                          color: context.textSecondary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BatteryArcPainter extends CustomPainter {
+  const _BatteryArcPainter({required this.progress, required this.color});
+  final double progress;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width * 0.40;
+    const startAngle = 140 * (math.pi / 180);
+    const sweepAngle = 260 * (math.pi / 180);
+
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      startAngle,
+      sweepAngle,
+      false,
+      Paint()
+        ..color = color.withValues(alpha: 0.10)
+        ..strokeWidth = 8
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round,
+    );
+
+    if (progress > 0) {
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        startAngle,
+        sweepAngle * progress,
+        false,
+        Paint()
+          ..color = color.withValues(alpha: 0.22)
+          ..strokeWidth = 16
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
+      );
+
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        startAngle,
+        sweepAngle * progress,
+        false,
+        Paint()
+          ..color = color
+          ..strokeWidth = 8
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BatteryArcPainter old) =>
+      old.progress != progress || old.color != color;
+}
+
+class _TemperatureGadget extends StatefulWidget {
+  const _TemperatureGadget({this.celsius = 32});
+  final double celsius;
+
+  @override
+  State<_TemperatureGadget> createState() => _TemperatureGadgetState();
+}
+
+class _TemperatureGadgetState extends State<_TemperatureGadget>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    _anim = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic),
+    );
+    _ctrl.forward();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  // Maps 0–80°C range to a 0..1 progress value for the arc.
+  double get _progress => (widget.celsius / 80).clamp(0.0, 1.0);
+
+  Color get _color {
+    if (widget.celsius < 30) return AppColors.secondary;
+    if (widget.celsius < 50) return AppColors.warning;
+    return AppColors.error;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _color;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.2), width: 0.8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.thermostat_rounded, size: 11, color: color),
+              const SizedBox(width: 5),
+              Text(
+                'TEMPERATURA',
+                style: TextStyle(
+                  color: context.textSecondary,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Center(
+            child: AnimatedBuilder(
+              animation: _anim,
+              builder: (context, _) => CustomPaint(
+                size: const Size(90, 90),
+                painter: _BatteryArcPainter(
+                  progress: _progress * _anim.value,
+                  color: color,
+                ),
+                child: SizedBox(
+                  width: 90,
+                  height: 90,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '${(widget.celsius * _anim.value).toStringAsFixed(0)}°',
+                        style: TextStyle(
+                          color: context.textPrimary,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                          height: 1,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'celsius',
+                        style: TextStyle(
+                          color: context.textSecondary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
