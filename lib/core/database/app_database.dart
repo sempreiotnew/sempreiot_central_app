@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,10 +39,12 @@ class AppDatabase extends _$AppDatabase {
       await customStatement(
         'CREATE INDEX idx_received_at ON serial_packets(received_at DESC)',
       );
+      await seedDefaultMetadata();
     },
     onUpgrade: (m, from, to) async {
       if (from < 2) {
         await m.createTable(deviceMetadata);
+        await seedDefaultMetadata();
       }
     },
   );
@@ -51,6 +55,26 @@ class AppDatabase extends _$AppDatabase {
           .go();
 
   Future<void> deleteAllPackets() => delete(serialPackets).go();
+
+  /// Seeds the three default metadata rows. Safe to call multiple times —
+  /// uses insertOrIgnore so existing values (e.g. user-set pin) are preserved.
+  Future<void> seedDefaultMetadata() async {
+    Future<void> seed(String key, Map<String, dynamic> defaults) =>
+        into(deviceMetadata).insert(
+          DeviceMetadataCompanion.insert(key: key, value: jsonEncode(defaults)),
+          mode: InsertMode.insertOrIgnore,
+        );
+
+    await seed('info', {
+      'firmware_version': '',
+      'hash': '',
+      'old_hash': '',
+      'created_at': '',
+      'updated_at': '',
+    });
+    await seed('credentials', {'pin': '', 'root': '', 'password': ''});
+    await seed('access', {'subId': ''});
+  }
 
   // Metadata helpers — upsert and read by key
   Future<void> setMeta(String key, String value) =>

@@ -11,6 +11,7 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
 import 'features/app/application/app_init_provider.dart';
 import 'features/central/application/serial_ingest_provider.dart';
+import 'features/central/data/services/factory_init_service.dart';
 import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/main/main_screen.dart';
 import 'presentation/screens/splash/splash_screen.dart';
@@ -65,18 +66,40 @@ class _AppRoot extends ConsumerWidget {
 }
 
 // ── CENTRAL mode ──────────────────────────────────────────────────────────────
-// Lock/unlock state is managed inside MainScreen itself.
 
+/// Runs once on central-mode startup:
+///   1. Ensures default metadata rows exist in the DB.
+///   2. If FACTORY env var is present, applies factory reset from its JSON.
+///   3. Starts serial data ingestion.
+///   4. Purges serial packets older than 30 days.
+final centralInitProvider = FutureProvider<void>((ref) async {
+  final db = ref.read(appDatabaseProvider);
+
+  await db.seedDefaultMetadata();
+
+  if (AppConfig.hasFactory) {
+    await FactoryInitService.applyFactory(db, AppConfig.factoryJson);
+  }
+
+  ref.read(serialIngestProvider);
+
+  await db.deleteOlderThan(
+    DateTime.now().toUtc().subtract(const Duration(days: 30)),
+  );
+});
+
+/// Lock/unlock state is managed inside MainScreen itself.
 class _CentralRoot extends ConsumerWidget {
   const _CentralRoot();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final db = ref.read(appDatabaseProvider);
-    ref.read(serialIngestProvider);
-    db.deleteOlderThan(
-      DateTime.now().toUtc().subtract(const Duration(days: 30)),
+    final initState = ref.watch(centralInitProvider);
+    return initState.when(
+      data: (_) => const MainScreen(),
+      loading: () => const SplashScreen(),
+      // Fail open in central mode — device must remain functional.
+      error: (_, __) => const MainScreen(),
     );
-    return const MainScreen();
   }
 }

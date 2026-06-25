@@ -8,6 +8,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/theme_ext.dart';
 import '../../../features/auth/application/auth_provider.dart';
 import '../../../features/central/application/central_auth_provider.dart';
+import '../../../features/centrais/presentation/screens/centrais_list_screen.dart';
 import '../../../core/connectivity/network_status_provider.dart';
 import '../../widgets/iot_network_animation.dart';
 import '../auth/login_screen.dart';
@@ -18,7 +19,11 @@ import 'widgets/main_bottom_nav.dart';
 import 'widgets/main_drawer.dart';
 
 class MainScreen extends ConsumerStatefulWidget {
-  const MainScreen({super.key});
+  const MainScreen({super.key, this.centralId});
+
+  /// When non-null (USER mode only), identifies the central being viewed.
+  /// The principal tab will show that central's dashboard.
+  final String? centralId;
 
   @override
   ConsumerState<MainScreen> createState() => _MainScreenState();
@@ -28,6 +33,17 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   MainTab _currentTab = MainTab.principal;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _pinOverlayVisible = AppConfig.isCentral;
+
+  void _handleTabChange(MainTab tab) {
+    // In USER mode, "Centrais" tab opens the list screen instead of switching tabs.
+    if (!AppConfig.isCentral && tab == MainTab.centrais) {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const CentralsListScreen()),
+      );
+      return;
+    }
+    setState(() => _currentTab = tab);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,20 +82,26 @@ class _MainScreenState extends ConsumerState<MainScreen> {
 
     return Builder(
       builder: (context) {
+        final isCentralDetail = widget.centralId != null;
+
         final scaffold = Scaffold(
           key: _scaffoldKey,
           backgroundColor: context.bgColor,
           appBar: MainAppBar(
             isLocked: isLocked,
             onMenuTap: () => _scaffoldKey.currentState?.openDrawer(),
+            // Show back arrow when drilling into a specific central.
+            onBack: isCentralDetail
+                ? () => Navigator.of(context).pop()
+                : null,
           ),
-          drawer: isLocked
+          drawer: (isLocked || isCentralDetail)
               ? null
               : MainDrawer(
                   currentTab: _currentTab,
-                  onTabSelected: (tab) => setState(() => _currentTab = tab),
+                  onTabSelected: _handleTabChange,
                 ),
-          body: _TabBody(currentTab: _currentTab),
+          body: _TabBody(currentTab: _currentTab, centralId: widget.centralId),
           bottomNavigationBar: AnimatedSwitcher(
               duration: const Duration(milliseconds: 420),
               transitionBuilder: (child, animation) {
@@ -96,13 +118,13 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                   ),
                 );
               },
-              child: isLocked
-                  ? const SizedBox.shrink(key: ValueKey('nav_locked'))
+              // Hide nav when locked or when viewing a specific central's detail.
+              child: (isLocked || isCentralDetail)
+                  ? const SizedBox.shrink(key: ValueKey('nav_hidden'))
                   : MainBottomNav(
                       key: const ValueKey('nav_unlocked'),
                       currentTab: _currentTab,
-                      onTabChanged: (tab) =>
-                          setState(() => _currentTab = tab),
+                      onTabChanged: _handleTabChange,
                     ),
             ),
         );
@@ -144,9 +166,10 @@ class _MainScreenState extends ConsumerState<MainScreen> {
 // ── Tab body with fade transitions ───────────────────────────────────────────
 
 class _TabBody extends StatelessWidget {
-  const _TabBody({required this.currentTab});
+  const _TabBody({required this.currentTab, this.centralId});
 
   final MainTab currentTab;
+  final String? centralId;
 
   @override
   Widget build(BuildContext context) {
@@ -164,7 +187,7 @@ class _TabBody extends StatelessWidget {
       child: KeyedSubtree(
         key: ValueKey(currentTab),
         child: switch (currentTab) {
-          MainTab.principal => const _PrincipalTab(),
+          MainTab.principal => _PrincipalTab(centralId: centralId),
           MainTab.central => const _PlaceholderTab(
               icon: Icons.sensors_rounded,
               title: 'Central',
@@ -195,14 +218,19 @@ class _TabBody extends StatelessWidget {
 // ── Principal tab — Dashboard ────────────────────────────────────────────────
 
 class _PrincipalTab extends ConsumerWidget {
-  const _PrincipalTab();
+  const _PrincipalTab({this.centralId});
+
+  final String? centralId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final networkStatus = ref.watch(networkStatusProvider);
-    return AppConfig.isCentral
-        ? _CentralDashboard(networkStatus: networkStatus)
-        : _AppDashboard(networkStatus: networkStatus);
+    // Show the central dashboard when in CENTRAL mode OR when a specific
+    // central has been selected from the centrais list in USER mode.
+    if (AppConfig.isCentral || centralId != null) {
+      return _CentralDashboard(networkStatus: networkStatus);
+    }
+    return _AppDashboard(networkStatus: networkStatus);
   }
 }
 
@@ -307,11 +335,14 @@ class _AppDashboard extends StatelessWidget {
           const SizedBox(height: 12),
           const _SectionLabel('REDE'),
           const SizedBox(height: 8),
-          const _MetricCard(
+          _MetricCard(
             icon: Icons.sensors_rounded,
             label: 'Total Centrais',
             value: _totalCentrals,
             accent: AppColors.secondary,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const CentralsListScreen()),
+            ),
           ),
           const SizedBox(height: 8),
           const _MetricCard(
@@ -356,10 +387,6 @@ class _AppDashboard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          const _SectionLabel('BATERIA'),
-          const SizedBox(height: 8),
-          const _GadgetRow(),
         ],
       ),
     );
@@ -626,6 +653,7 @@ class _MetricCard extends StatelessWidget {
     required this.value,
     required this.accent,
     this.compact = false,
+    this.onTap,
   });
 
   final IconData icon;
@@ -633,10 +661,11 @@ class _MetricCard extends StatelessWidget {
   final int value;
   final Color accent;
   final bool compact;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final card = Container(
       padding: EdgeInsets.all(compact ? 14 : 18),
       decoration: BoxDecoration(
         color: context.surfaceColor,
@@ -647,6 +676,18 @@ class _MetricCard extends StatelessWidget {
         ),
       ),
       child: compact ? _compactContent(context) : _fullContent(context),
+    );
+
+    if (onTap == null) return card;
+
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: card,
+      ),
     );
   }
 
@@ -733,6 +774,7 @@ class _MetricCard extends StatelessWidget {
     );
   }
 }
+
 
 // ── Gadget row ───────────────────────────────────────────────────────────────
 

@@ -7,6 +7,7 @@ import '../../../../core/theme/theme_ext.dart';
 import '../../../../core/theme/theme_provider.dart';
 import '../../../../features/auth/application/auth_provider.dart';
 import '../../../../features/central/application/central_auth_provider.dart';
+import '../../../../features/central/presentation/screens/device_info_screen.dart';
 import '../../../../features/storage/presentation/screens/storage_screen.dart';
 import '../main_tab.dart';
 
@@ -55,7 +56,7 @@ class MainDrawer extends ConsumerWidget {
                   const SizedBox(height: 16),
                   const _SectionLabel('SISTEMA'),
                   const SizedBox(height: 4),
-                  if (AppConfig.isCentral)
+                  if (AppConfig.isCentral) ...[
                     _DrawerItem(
                       icon: Icons.storage_rounded,
                       label: 'Armazenamento',
@@ -73,6 +74,19 @@ class MainDrawer extends ConsumerWidget {
                         );
                       },
                     ),
+                    _DrawerItem(
+                      icon: Icons.info_outline_rounded,
+                      label: 'Informações',
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const DeviceInfoScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                   const _ThemeToggleItem(),
                   const _DrawerItem(
                     icon: Icons.info_outline_rounded,

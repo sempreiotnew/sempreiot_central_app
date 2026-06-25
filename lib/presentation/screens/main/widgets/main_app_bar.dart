@@ -13,10 +13,14 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
     super.key,
     required this.onMenuTap,
     this.isLocked = false,
+    this.onBack,
   });
 
   final VoidCallback? onMenuTap;
   final bool isLocked;
+
+  /// When non-null, replaces the hamburger menu with a back arrow.
+  final VoidCallback? onBack;
 
   @override
   Size get preferredSize => const Size.fromHeight(60);
@@ -47,11 +51,17 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
               curve: Curves.easeInOutCubic,
               child: IgnorePointer(
                 ignoring: isLocked,
-                child: _BarIconButton(
-                  icon: Icons.menu_rounded,
-                  onTap: onMenuTap ?? () {},
-                  tooltip: 'Menu',
-                ),
+                child: onBack != null
+                    ? _BarIconButton(
+                        icon: Icons.arrow_back_ios_new_rounded,
+                        onTap: onBack!,
+                        tooltip: 'Voltar',
+                      )
+                    : _BarIconButton(
+                        icon: Icons.menu_rounded,
+                        onTap: onMenuTap ?? () {},
+                        tooltip: 'Menu',
+                      ),
               ),
             ),
             const SizedBox(width: 6),
