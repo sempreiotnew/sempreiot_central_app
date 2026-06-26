@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'core/config/amplify_config.dart';
 import 'core/config/app_config.dart';
 import 'core/database/app_database.dart';
@@ -20,7 +22,11 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load();
   await _configureAmplify(); // Both modes need Amplify Auth
-  runApp(const ProviderScope(child: SempreIoTApp()));
+  final prefs = await SharedPreferences.getInstance();
+  runApp(ProviderScope(
+    overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+    child: const SempreIoTApp(),
+  ));
 }
 
 Future<void> _configureAmplify() async {

@@ -7,6 +7,7 @@ import '../../../../core/theme/theme_ext.dart';
 import '../../../../core/theme/theme_provider.dart';
 import '../../../../features/auth/application/auth_provider.dart';
 import '../../../../features/central/application/central_auth_provider.dart';
+import '../../../../features/central/presentation/screens/device_access_screen.dart';
 import '../../../../features/central/presentation/screens/device_info_screen.dart';
 import '../../../../features/storage/presentation/screens/storage_screen.dart';
 import '../main_tab.dart';
@@ -43,16 +44,19 @@ class MainDrawer extends ConsumerWidget {
                 children: [
                   const _SectionLabel('NAVEGAÇÃO'),
                   const SizedBox(height: 4),
-                  ...MainTab.tabs.map(
-                    (tab) => _NavItem(
-                      tab: tab,
-                      active: tab == currentTab,
-                      onTap: () {
-                        Navigator.pop(context);
-                        onTabSelected(tab);
-                      },
-                    ),
-                  ),
+                  ...MainTab.tabs
+                      .where((t) =>
+                          t != MainTab.logs && t != MainTab.social)
+                      .map(
+                        (tab) => _NavItem(
+                          tab: tab,
+                          active: tab == currentTab,
+                          onTap: () {
+                            Navigator.pop(context);
+                            onTabSelected(tab);
+                          },
+                        ),
+                      ),
                   const SizedBox(height: 16),
                   const _SectionLabel('SISTEMA'),
                   const SizedBox(height: 4),
@@ -82,6 +86,18 @@ class MainDrawer extends ConsumerWidget {
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => const DeviceInfoScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    _DrawerItem(
+                      icon: Icons.manage_accounts_rounded,
+                      label: 'Acessos',
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const DeviceAccessScreen(),
                           ),
                         );
                       },

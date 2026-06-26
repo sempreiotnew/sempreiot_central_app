@@ -59,7 +59,7 @@ class AppDatabase extends _$AppDatabase {
   /// Seeds the three default metadata rows. Safe to call multiple times —
   /// uses insertOrIgnore so existing values (e.g. user-set pin) are preserved.
   Future<void> seedDefaultMetadata() async {
-    Future<void> seed(String key, Map<String, dynamic> defaults) =>
+    Future<void> seed(String key, Object defaults) =>
         into(deviceMetadata).insert(
           DeviceMetadataCompanion.insert(key: key, value: jsonEncode(defaults)),
           mode: InsertMode.insertOrIgnore,
@@ -73,8 +73,10 @@ class AppDatabase extends _$AppDatabase {
       'updated_at': '',
     });
     await seed('credentials', {'pin': '', 'root': '', 'password': ''});
-    await seed('access', {'subId': ''});
+    await seed('access', <dynamic>[]);
   }
+
+  Future<void> clearAllMeta() => delete(deviceMetadata).go();
 
   // Metadata helpers — upsert and read by key
   Future<void> setMeta(String key, String value) =>

@@ -28,6 +28,12 @@ class FactoryInitService {
       return;
     }
 
+    // Wipe all previous metadata so keys absent from the FACTORY JSON don't
+    // linger from a prior run, then restore clean defaults before overwriting.
+    await db.clearAllMeta();
+    await db.seedDefaultMetadata();
+    debugPrint('[Factory] Metadata cleared and defaults seeded.');
+
     for (final entry in data.entries) {
       final encoded = entry.value is String
           ? entry.value as String
