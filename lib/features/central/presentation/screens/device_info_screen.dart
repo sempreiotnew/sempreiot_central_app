@@ -49,6 +49,12 @@ class DeviceInfoScreen extends ConsumerWidget {
                 const SizedBox(height: 10),
                 InfoCard(
                   children: [
+                    InfoReadRow(
+                      label: 'Nome',
+                      value: info['name'] as String? ?? '',
+                      icon: Icons.label_rounded,
+                    ),
+                    const InfoRowDivider(),
                     _HashRow(hash: info['hash'] as String? ?? ''),
                     const InfoRowDivider(),
                     InfoReadRow(

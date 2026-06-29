@@ -30,7 +30,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(driftDatabase(name: 'sempreiot'));
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -44,6 +44,9 @@ class AppDatabase extends _$AppDatabase {
     onUpgrade: (m, from, to) async {
       if (from < 2) {
         await m.createTable(deviceMetadata);
+      }
+      if (from < 3) {
+        // Seeds new defaults; insertOrIgnore preserves existing rows.
         await seedDefaultMetadata();
       }
     },
@@ -66,6 +69,7 @@ class AppDatabase extends _$AppDatabase {
         );
 
     await seed('info', {
+      'name': '',
       'firmware_version': '',
       'hash': '',
       'old_hash': '',
@@ -74,6 +78,7 @@ class AppDatabase extends _$AppDatabase {
     });
     await seed('credentials', {'pin': '', 'root': '', 'password': ''});
     await seed('access', <dynamic>[]);
+    await seed('iot', {'iot_client_id': '', 'iot_password': ''});
   }
 
   Future<void> clearAllMeta() => delete(deviceMetadata).go();

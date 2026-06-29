@@ -4,16 +4,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
+import '../../../../core/database/app_database.dart';
 import '../../../iot/data/services/iot_credentials_service.dart';
-
-// Hardcoded for now — serial 123456789.
-// Replace with a proper provisioning mechanism (secure storage, etc.) later.
-const _kCentralUsername = 'central@sempreiot.com';
-const _kCentralPassword = 'Teste@123';
 
 /// Authenticates the Central device as its own machine user via direct Cognito
 /// HTTP calls — completely independent of the human user's Amplify session.
+/// Credentials are read from the [AppDatabase] `iot` metadata row, provisioned
+/// via the FACTORY dart-define on first boot.
 class CentralCredentialsService extends IotCredentialsService {
+  CentralCredentialsService({required AppDatabase db}) : _db = db;
+
+  final AppDatabase _db;
   String? _idToken;
   String? _cognitoSub;
   DateTime? _idTokenExpiry;
@@ -49,6 +50,20 @@ class CentralCredentialsService extends IotCredentialsService {
       return _idToken!;
     }
 
+    final iotRaw = await _db.getMeta('iot');
+    final iotMap = iotRaw != null
+        ? jsonDecode(iotRaw) as Map<String, dynamic>
+        : <String, dynamic>{};
+    final username = iotMap['iot_client_id'] as String? ?? '';
+    final password = iotMap['iot_password'] as String? ?? '';
+
+    if (username.isEmpty || password.isEmpty) {
+      throw Exception(
+        '[Central] IoT credentials not provisioned — '
+        'run with FACTORY dart-define containing an "iot" key',
+      );
+    }
+
     final region = dotenv.env['AWS_REGION']!;
     final clientId = dotenv.env['AWS_COGNITO_CLIENT_ID']!;
 
@@ -62,8 +77,8 @@ class CentralCredentialsService extends IotCredentialsService {
         'AuthFlow': 'USER_PASSWORD_AUTH',
         'ClientId': clientId,
         'AuthParameters': {
-          'USERNAME': _kCentralUsername,
-          'PASSWORD': _kCentralPassword,
+          'USERNAME': username,
+          'PASSWORD': password,
         },
       })),
     );

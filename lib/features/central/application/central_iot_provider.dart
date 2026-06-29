@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/connectivity/connectivity_provider.dart';
+import '../../../core/database/app_database.dart';
 import '../../iot/data/repositories/iot_mqtt_repository_impl.dart';
 import '../../iot/domain/entities/mqtt_message_entity.dart';
 import '../../iot/domain/repositories/i_iot_mqtt_repository.dart';
@@ -11,9 +12,10 @@ import '../data/services/central_credentials_service.dart';
 
 export '../../../core/connectivity/connectivity_provider.dart' show NetworkStatus;
 
-final centralMqttRepositoryProvider = Provider<IIotMqttRepository>((_) {
+final centralMqttRepositoryProvider = Provider<IIotMqttRepository>((ref) {
+  final db = ref.read(appDatabaseProvider);
   return IotMqttRepositoryImpl.forCentral(
-    credentialsService: CentralCredentialsService(),
+    credentialsService: CentralCredentialsService(db: db),
   );
 });
 
@@ -29,7 +31,6 @@ final centralMqttMessagesProvider = StreamProvider<MqttMessageEntity>((ref) {
 
 class CentralIotConnectionNotifier extends AsyncNotifier<bool> {
   static const _retryInterval = Duration(seconds: 5);
-  static const _kTopics = ['teste-central'];
 
   bool _shouldReconnect = false;
   bool _connecting = false;
@@ -77,8 +78,9 @@ class CentralIotConnectionNotifier extends AsyncNotifier<bool> {
       if (_disposed) return;
 
       _cancelSubs();
-      for (final topic in _kTopics) {
-        _topicSubs.add(repo.subscribe(topic).listen(
+      final id = repo.identityId;
+      if (id != null) {
+        _topicSubs.add(repo.subscribe('$id/#').listen(
           (msg) {
             if (!_messagesCtrl.isClosed) _messagesCtrl.add(msg);
             debugPrint('[Central] ← [${msg.topic}] ${msg.payload}');
@@ -89,7 +91,7 @@ class CentralIotConnectionNotifier extends AsyncNotifier<bool> {
       }
 
       state = const AsyncData(true);
-      debugPrint('[Central] ✓ MQTT connected, subscribed to $_kTopics');
+      debugPrint('[Central] ✓ MQTT connected, subscribed to ${id ?? "unknown"}/#');
     } catch (e, st) {
       debugPrint('[Central] ✗ MQTT connection failed: $e');
       if (_disposed) return;
