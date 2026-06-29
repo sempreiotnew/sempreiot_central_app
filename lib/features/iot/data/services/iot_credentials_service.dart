@@ -1,8 +1,9 @@
-
+import 'dart:convert';
 
 import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AwsCredentials {
   final String accessKeyId;
@@ -21,14 +22,18 @@ class AwsCredentials {
 }
 
 class IotCredentialsService {
+  IotCredentialsService({SharedPreferences? prefs}) : _prefs = prefs;
+
+  final SharedPreferences? _prefs;
   static const _forceRefreshAfter = Duration(minutes: 25);
   DateTime? _lastForcedRefresh;
 
+  String? cachedIdentityId(String userId) =>
+      _prefs?.getString('iot_identity_id_$userId');
+
+  String? get lastConnectedUserId => _prefs?.getString('iot_last_user_id');
+
   Future<AwsCredentials> fetch() async {
-    // Force a token refresh on the first call (covers hot restart — new instance,
-    // _lastForcedRefresh is null) or after 25 min (safety net in case the auth
-    // timer missed a beat). Rapid reconnects within that window use Amplify's
-    // cache, which avoids hammering Cognito's token endpoint every 5 seconds.
     final now = DateTime.now();
     final shouldForce = _lastForcedRefresh == null ||
         now.difference(_lastForcedRefresh!) >= _forceRefreshAfter;
@@ -49,17 +54,24 @@ class IotCredentialsService {
     debugPrint('[IoT] isSignedIn: ${session.isSignedIn} ');
     debugPrint('[IoT] ────────────────────────────────────────────');
 
-    final awsCreds = AwsCredentials(
+    _prefs?.setString('iot_identity_id_$userId', identityId);
+    _prefs?.setString('iot_last_user_id', userId);
+
+    return AwsCredentials(
       accessKeyId: creds.accessKeyId,
       secretAccessKey: creds.secretAccessKey,
       sessionToken: creds.sessionToken ?? '',
       identityId: identityId,
       userId: userId,
     );
-
-
-    return awsCreds;
   }
 
   void reset() => _lastForcedRefresh = null;
+}
+
+void debugPrintPreferences(SharedPreferences prefs) {
+  final map = {
+    for (final key in prefs.getKeys()) key: prefs.get(key),
+  };
+  debugPrint('[Prefs] ${const JsonEncoder.withIndent('  ').convert(map)}');
 }

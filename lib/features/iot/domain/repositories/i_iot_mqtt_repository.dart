@@ -2,6 +2,7 @@ import '../entities/mqtt_message_entity.dart';
 
 abstract interface class IIotMqttRepository {
   bool get isConnected;
+  String? get identityId;
   Future<void> connect({void Function()? onDisconnected});
   void disconnect();
   void publish(String topic, String payload);

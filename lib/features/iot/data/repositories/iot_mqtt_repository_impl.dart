@@ -53,9 +53,13 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
   bool _connected = false;
   DateTime? _connectedAt;
   void Function()? _onDisconnected;
+  String? _identityId;
 
   @override
   bool get isConnected => _connected;
+
+  @override
+  String? get identityId => _identityId;
 
   @override
   Future<void> connect({void Function()? onDisconnected}) async {
@@ -86,6 +90,8 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
     _publishCtrl = null;
 
     final creds = await _credentialsService.fetch();
+    _identityId = creds.identityId;
+    final clientId = kIsWeb ? 'web-${creds.identityId}' : creds.identityId;
 
     final signedUrl = SigV4Signer.buildSignedWebSocketUrl(
       host: _iotEndpoint,
@@ -101,7 +107,7 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
     _connected = false;
     _publishCtrl = StreamController.broadcast();
 
-    debugPrint('[IoT] connecting — clientId: ${creds.userId}');
+    debugPrint('[IoT] connecting — clientId: $clientId');
 
     _channel = WebSocketChannel.connect(
       Uri.parse(signedUrl),
@@ -116,7 +122,7 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
       cancelOnError: false,
     );
 
-    _channel!.sink.add(Uint8List.fromList(_mqttConnect(creds.userId)));
+    _channel!.sink.add(Uint8List.fromList(_mqttConnect(clientId)));
 
     await _connackCompleter!.future.timeout(
       const Duration(seconds: 10),
@@ -148,6 +154,7 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
   void disconnect() {
     _onDisconnected = null; // suppress reconnect callback
     _connected = false;
+    _identityId = null;
     _credentialsService.reset();
     _pingTimer?.cancel();
     _pingTimer = null;

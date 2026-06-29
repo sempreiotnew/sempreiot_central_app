@@ -62,11 +62,14 @@ class IotConnectionNotifier extends AsyncNotifier<bool> {
 
       ref.invalidate(iotMessageStreamProvider);
 
-      repo.subscribe('#').listen(
-        (msg) => debugPrint('[IoT] ← [${msg.topic}]: ${msg.payload}'),
-        onError: (e) => debugPrint('[IoT] # subscription error: $e'),
-        onDone: () => debugPrint('[IoT] # subscription stream closed'),
-      );
+      final id = repo.identityId;
+      if (id != null) {
+        repo.subscribe('$id/#').listen(
+          (msg) => debugPrint('[IoT] ← [${msg.topic}]: ${msg.payload}'),
+          onError: (e) => debugPrint('[IoT] own-topic subscription error: $e'),
+          onDone: () => debugPrint('[IoT] own-topic subscription stream closed'),
+        );
+      }
     } on SessionExpiredException {
       // Refresh token has expired — stop retrying. AuthNotifier's background
       // timer will detect this on its next tick and sign the user out.

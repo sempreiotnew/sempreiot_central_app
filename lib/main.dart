@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/config/amplify_config.dart';
+import 'features/iot/data/services/iot_credentials_service.dart';
 import 'core/config/app_config.dart';
 import 'core/database/app_database.dart';
 import 'core/theme/app_theme.dart';
@@ -23,6 +24,7 @@ Future<void> main() async {
   await dotenv.load();
   await _configureAmplify(); // Both modes need Amplify Auth
   final prefs = await SharedPreferences.getInstance();
+  debugPrintPreferences(prefs);
   runApp(ProviderScope(
     overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
     child: const SempreIoTApp(),
