@@ -5,6 +5,7 @@ import '../../../../core/config/app_config.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/theme_ext.dart';
 import '../../../../core/theme/theme_provider.dart';
+import '../../../../features/access/application/central_access_provider.dart';
 import '../../../../features/auth/application/auth_provider.dart';
 import '../../../../features/central/application/central_auth_provider.dart';
 import '../../../../features/central/presentation/screens/device_access_screen.dart';
@@ -90,18 +91,14 @@ class MainDrawer extends ConsumerWidget {
                         );
                       },
                     ),
-                    _DrawerItem(
-                      icon: Icons.manage_accounts_rounded,
-                      label: 'Acessos',
-                      onTap: () {
-                        Navigator.pop(context);
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const DeviceAccessScreen(),
-                          ),
-                        );
-                      },
-                    ),
+                    _AcessosDrawerItem(onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const DeviceAccessScreen(),
+                        ),
+                      );
+                    }),
                   ],
                   const _ThemeToggleItem(),
                   const _DrawerItem(
@@ -388,6 +385,68 @@ class _DrawerItem extends StatelessWidget {
                     fontSize: 14,
                   ),
                 ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Acessos item with a live pending-request badge for central mode.
+class _AcessosDrawerItem extends ConsumerWidget {
+  const _AcessosDrawerItem({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final count = ref.watch(pendingRequestCountProvider);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 2),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.manage_accounts_rounded,
+                  size: 19,
+                  color: context.textSecondary,
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    'Acessos',
+                    style: TextStyle(
+                      color: context.textSecondary,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                if (count > 0)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.warning,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '$count',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

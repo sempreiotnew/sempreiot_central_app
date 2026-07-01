@@ -74,7 +74,12 @@ class CentralIotConnectionNotifier extends AsyncNotifier<bool> {
     state = const AsyncLoading();
     try {
       final repo = ref.read(centralMqttRepositoryProvider);
-      await repo.connect(onDisconnected: _onUnexpectedDisconnect);
+      await repo.connect(
+        onDisconnected: _onUnexpectedDisconnect,
+        // Retained so a viewer who wasn't connected when this central
+        // dropped still sees "offline" the moment they subscribe.
+        will: (identityId) => (topic: '$identityId/will', payload: '{"status":"offline"}'),
+      );
       if (_disposed) return;
 
       _cancelSubs();
@@ -88,6 +93,9 @@ class CentralIotConnectionNotifier extends AsyncNotifier<bool> {
           onError: (_) {},
           cancelOnError: false,
         ));
+        // Announce presence immediately — retained, so it survives until the
+        // will (or a future online/offline publish) replaces it.
+        repo.publish('$id/will', '{"status":"online"}', retain: true);
       }
 
       state = const AsyncData(true);

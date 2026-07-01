@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-feature android:name="android.hardware.usb.host" />
+    <uses-permission android:name="android.permission.CAMERA" />
     <application
         android:label="sempreiot_central_app"
         android:name="${applicationName}"

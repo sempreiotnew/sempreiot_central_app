@@ -54,6 +54,7 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
   DateTime? _connectedAt;
   void Function()? _onDisconnected;
   String? _identityId;
+  String? _userId;
 
   @override
   bool get isConnected => _connected;
@@ -62,7 +63,13 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
   String? get identityId => _identityId;
 
   @override
-  Future<void> connect({void Function()? onDisconnected}) async {
+  String? get userId => _userId;
+
+  @override
+  Future<void> connect({
+    void Function()? onDisconnected,
+    MqttWill Function(String identityId)? will,
+  }) async {
     // If the connection survived a hot restart, just transfer the disconnect
     // callback to the new notifier — no new WebSocket, no session takeover.
     if (_connected) {
@@ -91,6 +98,7 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
 
     final creds = await _credentialsService.fetch();
     _identityId = creds.identityId;
+    _userId = creds.userId;
     final clientId = kIsWeb ? 'web-${creds.identityId}' : creds.identityId;
 
     final signedUrl = SigV4Signer.buildSignedWebSocketUrl(
@@ -122,7 +130,8 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
       cancelOnError: false,
     );
 
-    _channel!.sink.add(Uint8List.fromList(_mqttConnect(clientId)));
+    final resolvedWill = will?.call(creds.identityId);
+    _channel!.sink.add(Uint8List.fromList(_mqttConnect(clientId, will: resolvedWill)));
 
     await _connackCompleter!.future.timeout(
       const Duration(seconds: 10),
@@ -173,10 +182,12 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
   }
 
   @override
-  void publish(String topic, String payload) {
+  void publish(String topic, String payload, {bool retain = false}) {
     if (!_connected) throw StateError('Not connected');
-    debugPrint('[IoT] → publish [$topic]: $payload');
-    _channel!.sink.add(Uint8List.fromList(_mqttPublish(topic, payload, _pid())));
+    debugPrint('[IoT] → publish [$topic]: $payload${retain ? ' (retained)' : ''}');
+    _channel!.sink.add(Uint8List.fromList(
+      _mqttPublish(topic, payload, _pid(), retain: retain),
+    ));
   }
 
   @override
@@ -303,23 +314,47 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
 
   // ── MQTT packet builders ──────────────────────────────────────────────────
 
-  static List<int> _mqttConnect(String clientId, {int keepAliveSec = 60}) {
+  static List<int> _mqttConnect(String clientId, {int keepAliveSec = 60, MqttWill? will}) {
     final id = utf8.encode(clientId);
-    const vh = [0x00, 0x04, 0x4D, 0x51, 0x54, 0x54, 0x04, 0x02];
+    const protocolHeader = [0x00, 0x04, 0x4D, 0x51, 0x54, 0x54, 0x04]; // len + "MQTT" + level
+
+    // Connect flags: bit1 clean session, bit2 will flag, bits4-3 will QoS,
+    // bit5 will retain. The will is retained so a fresh subscriber (a user
+    // who wasn't connected when the central dropped) still sees "offline".
+    var connectFlags = 0x02;
+    final payload = <int>[(id.length >> 8) & 0xFF, id.length & 0xFF, ...id];
+
+    if (will != null) {
+      connectFlags |= 0x04 | 0x08 | 0x20; // will flag + QoS 1 + retain
+      final willTopic = utf8.encode(will.topic);
+      final willMessage = utf8.encode(will.payload);
+      payload.addAll([
+        (willTopic.length >> 8) & 0xFF, willTopic.length & 0xFF, ...willTopic,
+        (willMessage.length >> 8) & 0xFF, willMessage.length & 0xFF, ...willMessage,
+      ]);
+    }
+
+    final vh = [...protocolHeader, connectFlags];
     final ka = [(keepAliveSec >> 8) & 0xFF, keepAliveSec & 0xFF];
-    final pl = [(id.length >> 8) & 0xFF, id.length & 0xFF, ...id];
-    final rem = vh.length + ka.length + pl.length;
-    return [0x10, ..._remLen(rem), ...vh, ...ka, ...pl];
+    final rem = vh.length + ka.length + payload.length;
+    return [0x10, ..._remLen(rem), ...vh, ...ka, ...payload];
   }
 
-  static List<int> _mqttPublish(String topic, String msg, int id, {int qos = 1}) {
+  static List<int> _mqttPublish(
+    String topic,
+    String msg,
+    int id, {
+    int qos = 1,
+    bool retain = false,
+  }) {
     final t = utf8.encode(topic);
     final p = utf8.encode(msg);
     final vh = [
       (t.length >> 8) & 0xFF, t.length & 0xFF, ...t,
       if (qos > 0) ...<int>[(id >> 8) & 0xFF, id & 0xFF],
     ];
-    return [0x30 | ((qos & 0x03) << 1), ..._remLen(vh.length + p.length), ...vh, ...p];
+    final firstByte = 0x30 | ((qos & 0x03) << 1) | (retain ? 0x01 : 0x00);
+    return [firstByte, ..._remLen(vh.length + p.length), ...vh, ...p];
   }
 
   static List<int> _mqttSubscribe(String topic, int id, {int qos = 1}) {

@@ -16,23 +16,3 @@ final deviceCredentialsProvider =
   }
 });
 
-final deviceAccessProvider =
-    FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  final db = ref.watch(appDatabaseProvider);
-  final raw = await db.getMeta('access');
-  if (raw == null || raw.isEmpty) return [];
-  try {
-    final decoded = jsonDecode(raw);
-    if (decoded is List) {
-      return decoded.whereType<Map<String, dynamic>>().toList();
-    }
-    // Backwards-compat: single object stored before array migration
-    if (decoded is Map<String, dynamic>) {
-      final subId = decoded['subId'] as String? ?? '';
-      return subId.isNotEmpty ? [decoded] : [];
-    }
-    return [];
-  } catch (_) {
-    return [];
-  }
-});

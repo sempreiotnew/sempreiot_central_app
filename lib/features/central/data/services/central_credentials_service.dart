@@ -33,6 +33,10 @@ class CentralCredentialsService extends IotCredentialsService {
     return _exchangeForAwsCredentials(idToken);
   }
 
+  /// Returns the cached Cognito ID token, refreshing if needed.
+  /// Used by REST API calls that need a JWT bearer token.
+  Future<String> getIdToken() => _getIdToken();
+
   @override
   void reset() {
     _idToken = null;
