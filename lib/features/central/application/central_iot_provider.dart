@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/connectivity/connectivity_provider.dart';
 import '../../../core/database/app_database.dart';
+import '../../iot/application/presence_provider.dart';
 import '../../iot/data/repositories/iot_mqtt_repository_impl.dart';
 import '../../iot/domain/entities/mqtt_message_entity.dart';
 import '../../iot/domain/repositories/i_iot_mqtt_repository.dart';
@@ -77,8 +78,10 @@ class CentralIotConnectionNotifier extends AsyncNotifier<bool> {
       await repo.connect(
         onDisconnected: _onUnexpectedDisconnect,
         // Retained so a viewer who wasn't connected when this central
-        // dropped still sees "offline" the moment they subscribe.
-        will: (identityId) => (topic: '$identityId/will', payload: '{"status":"offline"}'),
+        // dropped still sees "offline" the moment they subscribe. Topic
+        // must go through presenceTopicFor so it stays in sync with what
+        // viewers subscribe to (and with the shared policy's */will grant).
+        will: (identityId) => (topic: presenceTopicFor(identityId), payload: '{"status":"offline"}'),
       );
       if (_disposed) return;
 
@@ -95,7 +98,7 @@ class CentralIotConnectionNotifier extends AsyncNotifier<bool> {
         ));
         // Announce presence immediately — retained, so it survives until the
         // will (or a future online/offline publish) replaces it.
-        repo.publish('$id/will', '{"status":"online"}', retain: true);
+        repo.publish(presenceTopicFor(id), '{"status":"online"}', retain: true);
       }
 
       state = const AsyncData(true);

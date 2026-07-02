@@ -11,6 +11,7 @@ import '../../../../features/access/presentation/sheets/add_central_sheet.dart';
 import '../../../../features/central/presentation/screens/central_status_screen.dart';
 import '../../../../presentation/screens/main/main_screen.dart';
 import '../../../../shared/widgets/app_search_bar.dart';
+import '../../../../shared/widgets/presence_indicator.dart';
 
 class CentralsListScreen extends ConsumerStatefulWidget {
   const CentralsListScreen({super.key});
@@ -319,6 +320,8 @@ class _CentralCard extends StatelessWidget {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 4),
+                    PresenceIndicator(identityId: item.identityId, dotSize: 6, fontSize: 11),
                   ],
                 ),
               ),

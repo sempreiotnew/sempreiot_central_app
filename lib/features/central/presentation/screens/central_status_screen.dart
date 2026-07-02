@@ -1,15 +1,13 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/theme_ext.dart';
 import '../../../../presentation/screens/main/main_screen.dart';
+import '../../../../shared/widgets/presence_indicator.dart';
 import '../../../access/application/user_access_provider.dart';
 import '../../../access/domain/entities/access_level.dart';
 import '../../../access/domain/entities/saved_central.dart';
-import '../../../iot/application/iot_provider.dart';
 import '../widgets/device_detail_widgets.dart';
 
 /// Strips the `Exception: ` prefix so the guard messages thrown by
@@ -78,12 +76,17 @@ class CentralStatusScreen extends ConsumerWidget {
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
               children: [
                 _StatusBanner(item: item),
-                if (item.status == 'PENDING') ...[
-                  const SizedBox(height: 20),
-                  const InfoSectionHeader('PRESENÇA'),
-                  const SizedBox(height: 10),
-                  _PresenceCard(identityId: item.identityId),
-                ],
+                const SizedBox(height: 20),
+                const InfoSectionHeader('PRESENÇA'),
+                const SizedBox(height: 10),
+                InfoCard(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      child: PresenceIndicator(identityId: item.identityId, fontSize: 13),
+                    ),
+                  ],
+                ),
                 if (item.status == 'REJECTED') ...[
                   const SizedBox(height: 24),
                   _RequestAgainButton(item: item),
@@ -170,67 +173,6 @@ class _StatusBanner extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-// ── Presence card ─────────────────────────────────────────────────────────────
-//
-// Backed by the central's MQTT Last-Will on `{identityId}/will` — retained,
-// so the current state arrives immediately on subscribe, and the broker
-// publishes "offline" on the central's behalf if it drops ungracefully.
-
-class _PresenceCard extends ConsumerWidget {
-  const _PresenceCard({required this.identityId});
-  final String identityId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final msgAsync = ref.watch(iotMessageStreamProvider('$identityId/will'));
-    final payload = msgAsync.valueOrNull?.payload;
-
-    String? status;
-    if (payload != null) {
-      try {
-        status = (jsonDecode(payload) as Map<String, dynamic>)['status'] as String?;
-      } catch (_) {}
-    }
-
-    final known = status != null;
-    final isOnline = status == 'online';
-    final color = !known
-        ? context.textSecondary.withValues(alpha: 0.3)
-        : isOnline
-            ? AppColors.success
-            : context.textSecondary.withValues(alpha: 0.5);
-    final label = !known ? 'Verificando…' : (isOnline ? 'Online' : 'Offline');
-
-    return InfoCard(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(shape: BoxShape.circle, color: color),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                label,
-                style: TextStyle(
-                  color: known
-                      ? context.textPrimary
-                      : context.textSecondary.withValues(alpha: 0.7),
-                  fontSize: 13,
-                  fontWeight: known ? FontWeight.w500 : FontWeight.w400,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

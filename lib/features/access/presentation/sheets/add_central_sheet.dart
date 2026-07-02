@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/theme_ext.dart';
 import '../../application/user_access_provider.dart';
 import '../../domain/entities/lookup_result.dart';
+import '../../../../shared/widgets/presence_indicator.dart';
 import 'package:sempreiot_central_app/features/access/presentation/screens/qr_scanner_screen.dart';
 
 /// Strips the `Exception: ` prefix so the guard messages thrown by
@@ -433,6 +434,8 @@ class _FoundCentralCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
+                const SizedBox(height: 5),
+                PresenceIndicator(identityId: result.identityId),
               ],
             ),
           ),

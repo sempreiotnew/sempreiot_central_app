@@ -50,6 +50,13 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
   Timer? _pingRespTimer;
   Completer<void>? _connackCompleter;
   bool _connackReceived = false;
+  // SUBSCRIBE packets awaiting their SUBACK, keyed by packet ID. AWS IoT
+  // signals a denied subscription only via SUBACK return code 0x80 — the
+  // subscription just silently never delivers otherwise. Denials are retried
+  // with backoff because IoT policy grants can land seconds after the action
+  // that triggered them (e.g. a lambda attaching a policy).
+  final Map<int, ({String topic, int attempt})> _pendingSubs = {};
+  static const _maxSubscribeAttempts = 5;
   bool _connected = false;
   DateTime? _connectedAt;
   void Function()? _onDisconnected;
@@ -95,6 +102,7 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
     _channel = null;
     _publishCtrl?.close();
     _publishCtrl = null;
+    _pendingSubs.clear();
 
     final creds = await _credentialsService.fetch();
     _identityId = creds.identityId;
@@ -147,7 +155,9 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
     _connectedAt = DateTime.now();
     debugPrint('[IoT] MQTT connected ✓');
 
-    _pingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    // Ping at half the keep-alive interval so one lost PINGREQ still leaves
+    // a second one inside the broker's 1.5× keep-alive window.
+    _pingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (!_connected) return;
       _channel?.sink.add(Uint8List.fromList(const [0xC0, 0x00]));
       _pingRespTimer?.cancel();
@@ -178,6 +188,7 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
     _subscription = null;
     _publishCtrl?.close();
     _publishCtrl = null;
+    _pendingSubs.clear();
     debugPrint('[IoT] disconnected');
   }
 
@@ -194,14 +205,31 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
   Stream<MqttMessageEntity> subscribe(String topic) {
     if (!_connected) throw StateError('Not connected');
     debugPrint('[IoT] subscribing to: $topic');
-    _channel!.sink.add(Uint8List.fromList(_mqttSubscribe(topic, _pid())));
+    _sendSubscribe(topic, attempt: 1);
     return _publishCtrl!.stream
         .where((m) => _topicMatches(m.topic, topic))
         .map((m) => MqttMessageEntity(topic: m.topic, payload: m.payload));
   }
 
+  void _sendSubscribe(String topic, {required int attempt}) {
+    final pid = _pid();
+    _pendingSubs[pid] = (topic: topic, attempt: attempt);
+    _channel!.sink.add(Uint8List.fromList(_mqttSubscribe(topic, pid)));
+  }
+
   // ── WebSocket callbacks ───────────────────────────────────────────────────
 
+  // A single WebSocket message can carry more than one MQTT packet — e.g.
+  // subscribing to a topic with a retained message pending can bring the
+  // SUBACK and the retained PUBLISH back in the same frame. This used to
+  // only ever look at the first packet's type byte and treat the rest of
+  // the buffer as that packet's payload — a SUBACK-then-PUBLISH frame was
+  // silently dropped whole (wrong type match), which meant the QoS 1
+  // retained PUBLISH never got its required PUBACK. AWS IoT then treated
+  // the client as protocol-violating and closed the connection — which
+  // reconnects, resubscribes, hits the same still-retained message, and
+  // repeats forever. Walking every packet in the buffer fixes both the
+  // lost message and the disconnect loop.
   void _onData(dynamic raw) {
     final Uint8List data;
     if (raw is Uint8List) {
@@ -212,12 +240,40 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
       return;
     }
     if (data.isEmpty) return;
-    final type = (data[0] >> 4) & 0x0F;
+
+    var offset = 0;
+    while (offset < data.length) {
+      final consumed = _handlePacket(data, offset);
+      if (consumed <= 0) break; // incomplete trailing packet — wait for more data
+      offset += consumed;
+    }
+  }
+
+  /// Handles one MQTT packet starting at [start] and returns how many bytes
+  /// it occupied (fixed header + remaining length + body), or 0 if the
+  /// buffer doesn't contain a complete packet there.
+  int _handlePacket(Uint8List data, int start) {
+    final type = (data[start] >> 4) & 0x0F;
+
+    var i = start + 1;
+    var multiplier = 1;
+    var remLen = 0;
+    int lenByte;
+    do {
+      if (i >= data.length) return 0;
+      lenByte = data[i++];
+      remLen += (lenByte & 0x7F) * multiplier;
+      multiplier *= 128;
+    } while ((lenByte & 0x80) != 0);
+
+    final bodyStart = i;
+    final packetEnd = bodyStart + remLen;
+    if (packetEnd > data.length) return 0;
 
     if (!_connackReceived) {
       if (type == 2) {
         _connackReceived = true;
-        final rc = data.length >= 4 ? data[3] : -1;
+        final rc = remLen >= 2 ? data[bodyStart + 1] : -1;
         if (rc == 0) {
           _connackCompleter?.complete();
         } else {
@@ -225,14 +281,24 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
           _connackCompleter?.completeError(Exception('MQTT CONNACK refused (code $rc)'));
         }
       }
-      return;
+      return packetEnd - start;
     }
 
-    if (type == 3) _handlePublish(data);
+    if (type == 3) {
+      final qos = (data[start] >> 1) & 0x03;
+      _handlePublish(data, bodyStart, packetEnd, qos);
+    }
+    if (type == 9 && remLen >= 3) {
+      _handleSuback(data, bodyStart);
+    }
     if (type == 13) {
       _pingRespTimer?.cancel();
       _pingRespTimer = null;
     }
+    // Other types (PUBACK, etc.) need no action, but must still be
+    // skipped correctly so any packet after them in the same buffer parses.
+
+    return packetEnd - start;
   }
 
   void _onError(Object error) {
@@ -247,7 +313,9 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
   }
 
   void _onDone() {
-    debugPrint('[IoT] connection closed');
+    // The WebSocket close code/reason is the actual authoritative signal
+    // for *why* AWS IoT dropped the connection — log it instead of guessing.
+    debugPrint('[IoT] connection closed — code: ${_channel?.closeCode}, reason: ${_channel?.closeReason}');
     _pingRespTimer?.cancel();
     _pingRespTimer = null;
     final wasConnected = _connected;
@@ -296,25 +364,53 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
     _onDisconnected?.call();
   }
 
-  void _handlePublish(Uint8List data) {
-    var i = 1;
-    while ((data[i++] & 0x80) != 0) {}
-    final qos = (data[0] >> 1) & 0x03;
+  void _handleSuback(Uint8List data, int bodyStart) {
+    final pid = (data[bodyStart] << 8) | data[bodyStart + 1];
+    final rc = data[bodyStart + 2];
+    final pending = _pendingSubs.remove(pid);
+    if (pending == null) return;
+
+    if (rc != 0x80) return; // granted (0x00/0x01/0x02)
+
+    if (pending.attempt >= _maxSubscribeAttempts) {
+      debugPrint('[IoT] ✗ subscribe to ${pending.topic} denied — giving up '
+          'after ${pending.attempt} attempts');
+      return;
+    }
+
+    final delay = Duration(seconds: 2 << (pending.attempt - 1));
+    debugPrint('[IoT] subscribe to ${pending.topic} denied (SUBACK 0x80) — '
+        'retry ${pending.attempt + 1}/$_maxSubscribeAttempts in ${delay.inSeconds}s');
+    final gen = _generation;
+    Timer(delay, () {
+      if (gen != _generation || !_connected) return;
+      _sendSubscribe(pending.topic, attempt: pending.attempt + 1);
+    });
+  }
+
+  void _handlePublish(Uint8List data, int bodyStart, int packetEnd, int qos) {
+    var i = bodyStart;
     final topicLen = (data[i] << 8) | data[i + 1];
     i += 2;
     final topic = utf8.decode(data.sublist(i, i + topicLen));
     i += topicLen;
     if (qos > 0) {
-      _channel?.sink.add(Uint8List.fromList([0x40, 0x02, data[i++], data[i++]])); // PUBACK
+      final pidHi = data[i++];
+      final pidLo = data[i++];
+      _channel?.sink.add(Uint8List.fromList([0x40, 0x02, pidHi, pidLo])); // PUBACK
     }
-    _publishCtrl?.add((topic: topic, payload: utf8.decode(data.sublist(i))));
+    _publishCtrl?.add((topic: topic, payload: utf8.decode(data.sublist(i, packetEnd))));
   }
 
   int _pid() => _nextPacketId = (_nextPacketId % 0xFFFF) + 1;
 
   // ── MQTT packet builders ──────────────────────────────────────────────────
 
-  static List<int> _mqttConnect(String clientId, {int keepAliveSec = 60, MqttWill? will}) {
+  // 30s is AWS IoT's minimum keep-alive. It bounds how fast the broker
+  // detects a silently-dead connection (power cut, network loss) and fires
+  // the Last Will: ~1.5× keep-alive, so ≤45s. The cost is pinging every
+  // 15s and less tolerance for network stalls (>45s stall = disconnect).
+  static List<int> _mqttConnect(String clientId, {int keepAliveSec = 30, MqttWill? will}) {
     final id = utf8.encode(clientId);
     const protocolHeader = [0x00, 0x04, 0x4D, 0x51, 0x54, 0x54, 0x04]; // len + "MQTT" + level
 
