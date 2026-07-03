@@ -8,12 +8,15 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/theme_ext.dart';
 import '../../../features/auth/application/auth_provider.dart';
 import '../../../features/central/application/central_auth_provider.dart';
+import '../../../features/central/application/central_status_publisher.dart';
+import '../../../features/iot/application/presence_provider.dart';
 import '../../../features/centrais/presentation/screens/centrais_list_screen.dart';
 import '../../../core/connectivity/network_status_provider.dart';
 import '../../widgets/iot_network_animation.dart';
 import '../auth/login_screen.dart';
 import '../../../features/central/presentation/screens/serial_logs_screen.dart';
 import 'main_tab.dart';
+import 'widgets/comm_status_gadget.dart';
 import 'widgets/main_app_bar.dart';
 import 'widgets/main_bottom_nav.dart';
 import 'widgets/main_drawer.dart';
@@ -49,6 +52,12 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   Widget build(BuildContext context) {
     final isLocked = AppConfig.isCentral &&
         ref.watch(centralAuthProvider) is! CentralAuthenticated;
+
+    // Keeps the retained presence payload fresh with wifi/usb state so
+    // users viewing this central see its real status. No-op in USER mode.
+    if (AppConfig.isCentral) {
+      ref.watch(centralStatusPublisherProvider);
+    }
 
     ref.listen(centralAuthProvider, (prev, next) {
       if (next is CentralAuthenticated && _pinOverlayVisible) {
@@ -89,6 +98,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
           backgroundColor: context.bgColor,
           appBar: MainAppBar(
             isLocked: isLocked,
+            centralId: widget.centralId,
             onMenuTap: () => _scaffoldKey.currentState?.openDrawer(),
             // Show back arrow when drilling into a specific central.
             onBack: isCentralDetail
@@ -224,22 +234,24 @@ class _PrincipalTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final networkStatus = ref.watch(networkStatusProvider);
     // Show the central dashboard when in CENTRAL mode OR when a specific
     // central has been selected from the centrais list in USER mode.
     if (AppConfig.isCentral || centralId != null) {
-      return _CentralDashboard(networkStatus: networkStatus);
+      return _CentralDashboard(centralId: centralId);
     }
-    return _AppDashboard(networkStatus: networkStatus);
+    return _AppDashboard(networkStatus: ref.watch(networkStatusProvider));
   }
 }
 
 // ── Central dashboard ────────────────────────────────────────────────────────
 
-class _CentralDashboard extends StatelessWidget {
-  const _CentralDashboard({required this.networkStatus});
+class _CentralDashboard extends ConsumerWidget {
+  const _CentralDashboard({this.centralId});
 
-  final NetworkStatus networkStatus;
+  /// Non-null only in USER mode: the central being viewed. All status shown
+  /// then comes from what that central publishes over MQTT — never from the
+  /// phone's own connectivity.
+  final String? centralId;
 
   // Placeholder counts — wire to real providers when backend is ready.
   static const _totalDevices = 0;
@@ -247,14 +259,31 @@ class _CentralDashboard extends StatelessWidget {
   static const _totalOk = 0;
   static const _totalAlarme = 0;
 
+  (Color, String) _centralStatus(WidgetRef ref) {
+    if (centralId == null) {
+      return switch (ref.watch(networkStatusProvider)) {
+        NetworkStatus.online  => (AppColors.success, 'Operacional'),
+        NetworkStatus.limited => (AppColors.warning, 'Acesso limitado'),
+        NetworkStatus.offline => (AppColors.error,   'Sem conexão'),
+      };
+    }
+    return switch (ref.watch(presenceStatusProvider(centralId!))) {
+      PresenceStatus.online  => (AppColors.success, 'Operacional'),
+      PresenceStatus.offline => (AppColors.error,   'Sem conexão'),
+      PresenceStatus.unknown => (AppColors.warning, 'Verificando…'),
+    };
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final (statusColor, statusLabel) = _centralStatus(ref);
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _CentralStatusCard(networkStatus: networkStatus),
+          _CentralStatusCard(color: statusColor, label: statusLabel),
           const SizedBox(height: 12),
           const _SectionLabel('DISPOSITIVOS'),
           const SizedBox(height: 8),
@@ -300,6 +329,12 @@ class _CentralDashboard extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          const _SectionLabel('COMUNICAÇÃO'),
+          const SizedBox(height: 8),
+          centralId == null
+              ? const CentralCommGadget()
+              : UserCentralCommGadget(identityId: centralId!),
           const SizedBox(height: 8),
           const _SectionLabel('BATERIA'),
           const SizedBox(height: 8),
@@ -490,17 +525,15 @@ class _SectionLabel extends StatelessWidget {
 }
 
 class _CentralStatusCard extends StatelessWidget {
-  const _CentralStatusCard({required this.networkStatus});
+  const _CentralStatusCard({required this.color, required this.label});
 
-  final NetworkStatus networkStatus;
+  final Color color;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
-    final (statusColor, statusLabel) = switch (networkStatus) {
-      NetworkStatus.online  => (AppColors.success, 'Operacional'),
-      NetworkStatus.limited => (AppColors.warning, 'Acesso limitado'),
-      NetworkStatus.offline => (AppColors.error,   'Sem conexão'),
-    };
+    final statusColor = color;
+    final statusLabel = label;
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -554,7 +587,7 @@ class _CentralStatusCard extends StatelessWidget {
               ],
             ),
           ),
-          _PulsingStatusDot(color: statusColor, active: networkStatus == NetworkStatus.online),
+          _PulsingStatusDot(color: statusColor, active: statusColor == AppColors.success),
         ],
       ),
     );

@@ -6,6 +6,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../../../core/services/sigv4_signer.dart';
+import '../../../../core/utils/mqtt_log.dart';
 import '../../domain/entities/mqtt_message_entity.dart';
 import '../../domain/repositories/i_iot_mqtt_repository.dart';
 import '../services/iot_credentials_service.dart';
@@ -195,7 +196,7 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
   @override
   void publish(String topic, String payload, {bool retain = false}) {
     if (!_connected) throw StateError('Not connected');
-    debugPrint('[IoT] → publish [$topic]: $payload${retain ? ' (retained)' : ''}');
+    MqttLog.pub(topic, payload, retained: retain);
     _channel!.sink.add(Uint8List.fromList(
       _mqttPublish(topic, payload, _pid(), retain: retain),
     ));
@@ -204,7 +205,7 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
   @override
   Stream<MqttMessageEntity> subscribe(String topic) {
     if (!_connected) throw StateError('Not connected');
-    debugPrint('[IoT] subscribing to: $topic');
+    MqttLog.sub(topic);
     _sendSubscribe(topic, attempt: 1);
     return _publishCtrl!.stream
         .where((m) => _topicMatches(m.topic, topic))
@@ -399,7 +400,9 @@ class IotMqttRepositoryImpl implements IIotMqttRepository {
       final pidLo = data[i++];
       _channel?.sink.add(Uint8List.fromList([0x40, 0x02, pidHi, pidLo])); // PUBACK
     }
-    _publishCtrl?.add((topic: topic, payload: utf8.decode(data.sublist(i, packetEnd))));
+    final payload = utf8.decode(data.sublist(i, packetEnd));
+    MqttLog.rx(topic, payload);
+    _publishCtrl?.add((topic: topic, payload: payload));
   }
 
   int _pid() => _nextPacketId = (_nextPacketId % 0xFFFF) + 1;

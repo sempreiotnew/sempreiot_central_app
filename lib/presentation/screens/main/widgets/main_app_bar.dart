@@ -4,9 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/theme_ext.dart';
+import '../../../../features/access/application/user_access_provider.dart';
 import '../../../../features/auth/application/auth_provider.dart';
 import '../../../../features/central/application/central_auth_provider.dart';
-import 'status_indicators.dart';
+import '../../../../features/central/application/device_info_provider.dart';
 
 class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
   const MainAppBar({
@@ -14,6 +15,7 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
     required this.onMenuTap,
     this.isLocked = false,
     this.onBack,
+    this.centralId,
   });
 
   final VoidCallback? onMenuTap;
@@ -21,6 +23,10 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
 
   /// When non-null, replaces the hamburger menu with a back arrow.
   final VoidCallback? onBack;
+
+  /// USER mode only: the central being viewed — its name replaces the
+  /// app branding in the title.
+  final String? centralId;
 
   @override
   Size get preferredSize => const Size.fromHeight(60);
@@ -65,14 +71,7 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
               ),
             ),
             const SizedBox(width: 6),
-            const Expanded(child: _Branding()),
-            const WifiIndicator(),
-            if (AppConfig.isCentral) ...[
-              const SizedBox(width: 2),
-              const UsbIndicator(),
-            ],
-            const SizedBox(width: 2),
-            const MqttIndicator(),
+            Expanded(child: _Branding(centralId: centralId)),
             if (AppConfig.isCentral) ...[
               const SizedBox(width: 2),
               AnimatedSwitcher(
@@ -128,11 +127,15 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
   }
 }
 
-class _Branding extends StatelessWidget {
-  const _Branding();
+class _Branding extends ConsumerWidget {
+  const _Branding({this.centralId});
+
+  final String? centralId;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final (title, subtitle) = _resolveTitle(ref);
+
     return Row(
       children: [
         Container(
@@ -153,30 +156,56 @@ class _Branding extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              AppConfig.isCentral ? 'Central' : 'SempreIoT',
-              style: TextStyle(
-                color: context.textPrimary,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.2,
+        Expanded(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: context.textPrimary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.2,
+                ),
               ),
-            ),
-            Text(
-              AppConfig.isCentral ? 'Modo Central' : 'Painel de controle',
-              style: TextStyle(
-                color: context.textSecondary,
-                fontSize: 10,
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: context.textSecondary,
+                  fontSize: 10,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );
+  }
+
+  /// CENTRAL mode: the device's own name from the "info" metadata (set via
+  /// FACTORY JSON). USER mode viewing a central: the saved central's name.
+  /// USER mode home: app branding.
+  (String, String) _resolveTitle(WidgetRef ref) {
+    if (AppConfig.isCentral) {
+      final name =
+          ref.watch(deviceInfoProvider).valueOrNull?['name'] as String? ?? '';
+      return (name.isNotEmpty ? name : 'Central', 'Modo Central');
+    }
+    if (centralId != null) {
+      final centrals = ref.watch(savedCentralsProvider);
+      final name = centrals
+          .where((c) => c.identityId == centralId)
+          .map((c) => c.name)
+          .firstWhere((n) => n.isNotEmpty, orElse: () => '');
+      return (name.isNotEmpty ? name : 'Central', 'Central conectada');
+    }
+    return ('SempreIoT', 'Painel de controle');
   }
 }
 

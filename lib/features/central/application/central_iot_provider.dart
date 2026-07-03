@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/connectivity/connectivity_provider.dart';
 import '../../../core/database/app_database.dart';
 import '../../iot/application/presence_provider.dart';
 import '../../iot/data/repositories/iot_mqtt_repository_impl.dart';
@@ -56,7 +55,18 @@ class CentralIotConnectionNotifier extends AsyncNotifier<bool> {
       _shouldReconnect = false;
       _cancelSubs();
       _messagesCtrl.close();
-      ref.read(centralMqttRepositoryProvider).disconnect();
+      final repo = ref.read(centralMqttRepositoryProvider);
+      // A graceful DISCONNECT discards the Last Will, so viewers would keep
+      // seeing the retained "online" forever — publish "offline" explicitly
+      // before closing.
+      final id = repo.identityId;
+      if (id != null && repo.isConnected) {
+        try {
+          repo.publish(presenceTopicFor(id), '{"status":"offline"}',
+              retain: true);
+        } catch (_) {}
+      }
+      repo.disconnect();
     });
 
     return false;

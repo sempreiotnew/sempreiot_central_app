@@ -36,7 +36,8 @@
       "Bash(zip -rq function.zip.new index.mjs package.json package-lock.json node_modules)",
       "Bash(mv function.zip.new function.zip)",
       "Bash(python3 -)",
-      "Bash(node --check /Users/tallesrocha/Desktop/sempreiot-vibe-new/lambda/access-resolve/index.mjs)"
+      "Bash(node --check /Users/tallesrocha/Desktop/sempreiot-vibe-new/lambda/access-resolve/index.mjs)",
+      "Bash(flutter test *)"
     ]
   }
 }
