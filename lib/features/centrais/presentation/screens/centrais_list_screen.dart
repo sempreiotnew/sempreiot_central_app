@@ -285,8 +285,11 @@ class _CentralCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 2),
+                    // The subId is the central's public identity (QR/lookup)
+                    // — always visible so personal nicknames can't cause
+                    // ambiguity about which central this is.
                     Text(
-                      item.identityId,
+                      item.subId,
                       style: TextStyle(
                         color: context.textSecondary,
                         fontSize: 11,
@@ -296,30 +299,36 @@ class _CentralCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        if (isPending)
-                          _PulsingDot(color: statusColor)
-                        else
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
+                    // Accepted → the granted level, rendered with the same
+                    // icon/color/label pattern the central's Acessos screen
+                    // uses. Other statuses keep the plain status dot.
+                    if (isPending || isRejected || isBlocked)
+                      Row(
+                        children: [
+                          if (isPending)
+                            _PulsingDot(color: statusColor)
+                          else
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: statusColor,
+                              ),
+                            ),
+                          const SizedBox(width: 5),
+                          Text(
+                            statusLabel,
+                            style: TextStyle(
                               color: statusColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
-                        const SizedBox(width: 5),
-                        Text(
-                          statusLabel,
-                          style: TextStyle(
-                            color: statusColor,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      )
+                    else
+                      _LevelBadge(level: item.level ?? AccessLevel.level1),
                     const SizedBox(height: 4),
                     PresenceIndicator(identityId: item.identityId, dotSize: 6, fontSize: 11),
                   ],
@@ -335,6 +344,52 @@ class _CentralCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Level rendering matching the central's Acessos screen: level icon +
+/// colored label + the NÍVEL pill (same colors from [AccessLevel]).
+class _LevelBadge extends StatelessWidget {
+  const _LevelBadge({required this.level});
+  final AccessLevel level;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(level.icon, size: 12, color: level.color),
+        const SizedBox(width: 5),
+        Text(
+          level.label,
+          style: TextStyle(
+            color: level.color,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+          decoration: BoxDecoration(
+            color: level.color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: level.color.withValues(alpha: 0.3),
+              width: 0.8,
+            ),
+          ),
+          child: Text(
+            level.shortLabel,
+            style: TextStyle(
+              color: level.color,
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

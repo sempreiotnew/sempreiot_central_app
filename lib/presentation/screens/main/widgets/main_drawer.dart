@@ -8,6 +8,7 @@ import '../../../../core/theme/theme_provider.dart';
 import '../../../../features/access/application/central_access_provider.dart';
 import '../../../../features/auth/application/auth_provider.dart';
 import '../../../../features/central/application/central_auth_provider.dart';
+import '../../../../features/central/application/device_info_provider.dart';
 import '../../../../features/central/presentation/screens/device_access_screen.dart';
 import '../../../../features/central/presentation/screens/device_info_screen.dart';
 import '../../../../features/storage/presentation/screens/storage_screen.dart';
@@ -30,6 +31,14 @@ class MainDrawer extends ConsumerWidget {
         : (ref.watch(authNotifierProvider).valueOrNull?.userId ?? '—');
     final initials = AppConfig.isCentral ? 'CT' : _initials(userId);
     final width = (MediaQuery.of(context).size.width * 0.82).clamp(0.0, 320.0);
+    // Central mode: header shows the central's own name from the "info"
+    // metadata (set via FACTORY), not a fixed label.
+    final centralName = AppConfig.isCentral
+        ? ((ref.watch(deviceInfoProvider).valueOrNull?['name'] as String?) ?? '')
+        : '';
+    final headerTitle = AppConfig.isCentral
+        ? (centralName.isNotEmpty ? centralName : 'Central SempreIoT')
+        : 'Minha conta';
 
     return SizedBox(
       width: width,
@@ -38,7 +47,7 @@ class MainDrawer extends ConsumerWidget {
         shape: const RoundedRectangleBorder(),
         child: Column(
           children: [
-            _DrawerHeader(initials: initials, userId: userId),
+            _DrawerHeader(initials: initials, userId: userId, title: headerTitle),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -123,10 +132,15 @@ class MainDrawer extends ConsumerWidget {
 }
 
 class _DrawerHeader extends StatelessWidget {
-  const _DrawerHeader({required this.initials, required this.userId});
+  const _DrawerHeader({
+    required this.initials,
+    required this.userId,
+    required this.title,
+  });
 
   final String initials;
   final String userId;
+  final String title;
 
   @override
   Widget build(BuildContext context) {
@@ -175,7 +189,9 @@ class _DrawerHeader extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            AppConfig.isCentral ? 'Central SempreIoT' : 'Minha conta',
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: AppColors.textPrimaryDark,
               fontSize: 15,

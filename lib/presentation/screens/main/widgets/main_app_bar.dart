@@ -5,6 +5,8 @@ import '../../../../core/config/app_config.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/theme_ext.dart';
 import '../../../../features/access/application/user_access_provider.dart';
+import '../../../../features/access/domain/entities/saved_central.dart';
+import '../../../../features/access/presentation/sheets/rename_central_sheet.dart';
 import '../../../../features/auth/application/auth_provider.dart';
 import '../../../../features/central/application/central_auth_provider.dart';
 import '../../../../features/central/application/device_info_provider.dart';
@@ -135,57 +137,89 @@ class _Branding extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final (title, subtitle) = _resolveTitle(ref);
+    // USER mode viewing a central: tapping the name opens the (local)
+    // rename sheet — the nickname belongs to this user only.
+    final renameTarget = _renameTarget(ref);
 
-    return Row(
-      children: [
-        Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.primary, AppColors.secondary],
+    return GestureDetector(
+      onTap: renameTarget != null
+          ? () => showRenameCentralSheet(context, renameTarget)
+          : null,
+      behavior: HitTestBehavior.opaque,
+      child: Row(
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [AppColors.primary, AppColors.secondary],
+              ),
+              borderRadius: BorderRadius.circular(8),
             ),
-            borderRadius: BorderRadius.circular(8),
+            child: const Icon(
+              Icons.sensors_rounded,
+              color: AppColors.white,
+              size: 15,
+            ),
           ),
-          child: const Icon(
-            Icons.sensors_rounded,
-            color: AppColors.white,
-            size: 15,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: context.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.2,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: context.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ),
+                    if (renameTarget != null) ...[
+                      const SizedBox(width: 5),
+                      Icon(
+                        Icons.edit_rounded,
+                        size: 11,
+                        color: context.textSecondary.withValues(alpha: 0.6),
+                      ),
+                    ],
+                  ],
                 ),
-              ),
-              Text(
-                subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: context.textSecondary,
-                  fontSize: 10,
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: context.textSecondary,
+                    fontSize: 10,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
+  }
+
+  SavedCentral? _renameTarget(WidgetRef ref) {
+    if (AppConfig.isCentral || centralId == null) return null;
+    final matches = ref
+        .watch(savedCentralsProvider)
+        .where((c) => c.identityId == centralId)
+        .toList();
+    return matches.isNotEmpty ? matches.first : null;
   }
 
   /// CENTRAL mode: the device's own name from the "info" metadata (set via
@@ -199,11 +233,16 @@ class _Branding extends ConsumerWidget {
     }
     if (centralId != null) {
       final centrals = ref.watch(savedCentralsProvider);
-      final name = centrals
-          .where((c) => c.identityId == centralId)
-          .map((c) => c.name)
-          .firstWhere((n) => n.isNotEmpty, orElse: () => '');
-      return (name.isNotEmpty ? name : 'Central', 'Central conectada');
+      final matches =
+          centrals.where((c) => c.identityId == centralId).toList();
+      final name = matches.isNotEmpty ? matches.first.name : '';
+      // Subtitle shows the subId — the central's real identity — so the
+      // user's personal nickname above it can never cause ambiguity.
+      final subId = matches.isNotEmpty ? matches.first.subId : '';
+      return (
+        name.isNotEmpty ? name : 'Central',
+        subId.isNotEmpty ? subId : 'Central conectada',
+      );
     }
     return ('SempreIoT', 'Painel de controle');
   }

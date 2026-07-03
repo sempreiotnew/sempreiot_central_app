@@ -187,6 +187,18 @@ class SavedCentralsNotifier extends StateNotifier<List<SavedCentral>> {
     await _persist();
   }
 
+  /// Sets this user's local nickname for a central. Purely local — every
+  /// user labels centrals however they like; the subId is the identity.
+  Future<void> updateName(String identityId, String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+    state = [
+      for (final c in state)
+        if (c.identityId == identityId) c.copyWith(name: trimmed) else c,
+    ];
+    await _persist();
+  }
+
   Future<void> _persist() async {
     final key = _prefsKey;
     if (key == null) return; // no signed-in user resolved yet

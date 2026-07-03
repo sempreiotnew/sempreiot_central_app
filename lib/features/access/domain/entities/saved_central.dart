@@ -19,6 +19,7 @@ class SavedCentral {
   });
 
   SavedCentral copyWith({
+    String? name,
     String? status,
     AccessLevel? level,
     bool clearLevel = false,
@@ -26,7 +27,7 @@ class SavedCentral {
       SavedCentral(
         subId: subId,
         identityId: identityId,
-        name: name,
+        name: name ?? this.name,
         status: status ?? this.status,
         level: clearLevel ? null : (level ?? this.level),
         addedAt: addedAt,
