@@ -1,8 +1,6 @@
-import 'dart:convert';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/database/app_database.dart';
+import 'credentials_admin_provider.dart';
 
 sealed class CentralAuthState {
   const CentralAuthState();
@@ -30,31 +28,20 @@ class CentralAuthNotifier extends Notifier<CentralAuthState> {
   @override
   CentralAuthState build() => const CentralUnauthenticated();
 
-  /// Reads the PIN from the local database and validates [pin] against it.
+  /// Validates [pin] against the central's (hashed) unlock PIN — a secret
+  /// dedicated to unlocking the screen, separate from the master role PIN —
+  /// through the shared rate limiter that locks every PIN gate at once.
   Future<void> verify(String pin) async {
-    final db = ref.read(appDatabaseProvider);
+    final creds = ref.read(credentialsAdminProvider);
+    final outcome = await creds.verifyUnlockPin(pin);
 
-    String storedPin = '';
-    try {
-      final raw = await db.getMeta('credentials');
-      if (raw != null && raw.isNotEmpty) {
-        final map = jsonDecode(raw) as Map<String, dynamic>;
-        storedPin = map['pin'] as String? ?? '';
-      }
-    } catch (_) {
-      storedPin = '';
-    }
-
-    if (storedPin.isEmpty) {
-      state = const CentralPinError('PIN não configurado.');
-      return;
-    }
-
-    if (pin == storedPin) {
-      state = const CentralAuthenticated();
-    } else {
-      state = const CentralPinError('Código incorreto. Tente novamente.');
-    }
+    state = switch (outcome) {
+      VerifyOk() => const CentralAuthenticated(),
+      VerifyUnset() => const CentralPinError('PIN não configurado.'),
+      VerifyLocked(:final remaining) =>
+        CentralPinError('Muitas tentativas. Aguarde ${remaining.inSeconds}s.'),
+      VerifyWrong() => const CentralPinError('Código incorreto. Tente novamente.'),
+    };
   }
 
   void reset() => state = const CentralUnauthenticated();

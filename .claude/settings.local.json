@@ -30,7 +30,13 @@
       "Bash(git -C /Users/tallesrocha/Desktop/sempreiot-vibe-new/mobile/sempreiot_central_app diff lib/features/centrais/presentation/screens/centrais_list_screen.dart)",
       "Bash(unzip -l /Users/tallesrocha/Desktop/sempreiot-vibe-new/lambda/access-request/function.zip)",
       "Bash(unzip -l /Users/tallesrocha/Desktop/sempreiot-vibe-new/lambda/lookup/function.zip)",
-      "Bash(zip -rq function.zip index.mjs package.json package-lock.json node_modules)"
+      "Bash(zip -rq function.zip index.mjs package.json package-lock.json node_modules)",
+      "Bash(dart run *)",
+      "Bash(ls function.zip)",
+      "Bash(zip -rq function.zip.new index.mjs package.json package-lock.json node_modules)",
+      "Bash(mv function.zip.new function.zip)",
+      "Bash(python3 -)",
+      "Bash(node --check /Users/tallesrocha/Desktop/sempreiot-vibe-new/lambda/access-resolve/index.mjs)"
     ]
   }
 }

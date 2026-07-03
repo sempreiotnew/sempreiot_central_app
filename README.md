@@ -34,7 +34,9 @@ flutter run -d 98cc396d \
   --dart-define='FACTORY={"info":{"name":"Central Nome","firmware_version":"1.0.0","hash":"a1b2c3","old_hash":"","created_at":"2026-06-25","updated_at":"2026-06-25"},"credentials":{"pin":"428412","root":"admin","password":"Teste@123"},"access":[{"subId":"sub-9f3a21bc","role":"OWNER","pin":"123123"},{"subId":"sub-8f3a21bc","role":"ADMIN","pin":"123123"}],"iot":{"iot_client_id":"central-002@sempreiot.com","iot_password":"$y3XYZv8H)Dw@O+(7+Sy"}}'
 
 
-
+flutter run -d 98cc396d \
+  --dart-define=APP_MODE=central \
+  --dart-define='FACTORY={"info":{"name":"Central Nome","firmware_version":"1.0.0","hash":"a1b2c3","old_hash":"","created_at":"2026-06-25","updated_at":"2026-06-25"},"credentials":{"pin":"428412","root":"admin","password":"Teste@123"},"iot":{"iot_client_id":"central-003@sempreiot.com","iot_password":"$y3XYZv8H)Dw@O+(7+Sy"}}'
 
   ---
 Step 1 — CloudShell: DynamoDB tables
@@ -232,10 +234,26 @@ curl -X POST https://czbtuf62d0.execute-api.us-east-1.amazonaws.com/access/resol
   }'
 
 
+  curl -X POST http://localhost:3001 \
+  -H "Content-Type: application/json" \
+  -d '{"centralId":"central-004","name":"Central Teste"}'
+
+
 ## Config the CALLBACK COGNITO
-# ⚠️ WARNING: update-user-pool-client REPLACES the entire config.
-# Always include ALL fields below or you will wipe OAuth/providers/auth flows.
 aws cognito-idp update-user-pool-client \
+  --user-pool-id us-east-1_t6mTbVcqB \
+  --client-id 6kr0mt8agn8n7f116r2kl1if69 \
+  --region us-east-1 \
+  --allowed-o-auth-flows code \
+  --allowed-o-auth-flows-user-pool-client \
+  --allowed-o-auth-scopes openid email \
+  --supported-identity-providers Google SignInWithApple \
+  --callback-urls "sempreiotcentral://callback" "http://localhost:52901/" \
+  --logout-urls "sempreiotcentral://callback" "http://localhost:52901/" \
+  --no-generate-secret
+
+
+  aws cognito-idp update-user-pool-client \
   --user-pool-id us-east-1_t6mTbVcqB \
   --client-id 6kr0mt8agn8n7f116r2kl1if69 \
   --region us-east-1 \
@@ -243,10 +261,16 @@ aws cognito-idp update-user-pool-client \
     ALLOW_USER_SRP_AUTH \
     ALLOW_REFRESH_TOKEN_AUTH \
     ALLOW_USER_PASSWORD_AUTH \
-    ALLOW_ADMIN_USER_PASSWORD_AUTH \
-  --supported-identity-providers Google SignInWithApple COGNITO \
-  --callback-urls "sempreiotcentral://callback" "http://localhost:52901/" \
-  --logout-urls "sempreiotcentral://callback" "http://localhost:52901/" \
-  --allowed-o-auth-flows code \
-  --allowed-o-auth-scopes openid email \
-  --allowed-o-auth-flows-user-pool-client
+    ALLOW_ADMIN_USER_PASSWORD_AUTH
+
+
+us-east-1:960b9435-b271-c27e-0781-73fe64baa097/access
+    {
+  "userSubId": "test-user-sub-001",
+  "userIdentityId": "us-east-1:fake-identity-for-test",
+  "masterPin": "428412"
+}
+
+flutter run -d 98cc396d \
+  --dart-define=APP_MODE=central \
+  --dart-define='FACTORY={"info":{"name":"Central Nome","firmware_version":"1.0.0","hash":"a1b2c3","old_hash":"","created_at":"2026-06-25","updated_at":"2026-06-25"},"credentials":{"pin":"428412","unlock_pin":"731942","root":"admin","password":"Teste@123","level_pins":{"LEVEL_1":"111111","LEVEL_2":"222222","LEVEL_3":"333333","LEVEL_4":"444444"}},"iot":{"iot_client_id":"central-003@sempreiot.com","iot_password":"$y3XYZv8H)Dw@O+(7+Sy"}}'

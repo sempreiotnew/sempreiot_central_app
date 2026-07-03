@@ -1,11 +1,10 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/database/app_database.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/theme_ext.dart';
+import '../../../access/domain/entities/access_level.dart';
+import '../../application/credentials_admin_provider.dart';
 import '../../application/device_metadata_providers.dart';
 import '../../../../shared/widgets/pin_pad.dart';
 
@@ -19,19 +18,44 @@ extension on _PinStep {
       };
 }
 
+/// Current → new → confirm flow for any PIN on this central.
+///
+/// Targets, in priority order: [unlock] true → the unlock PIN; [level]
+/// set → that level's PIN; neither → the master PIN. [skipCurrent] skips
+/// the current-PIN step — the Master-only path for resetting a forgotten
+/// PIN or setting one for the first time; the service re-validates that.
 class PinChangeScreen extends ConsumerStatefulWidget {
-  const PinChangeScreen({super.key});
+  const PinChangeScreen({
+    super.key,
+    this.level,
+    this.unlock = false,
+    this.skipCurrent = false,
+    this.editorRole = EditorRole.master,
+  }) : assert(!(unlock && level != null));
+
+  final AccessLevel? level;
+  final bool unlock;
+  final bool skipCurrent;
+  final EditorRole editorRole;
 
   @override
   ConsumerState<PinChangeScreen> createState() => _PinChangeScreenState();
 }
 
 class _PinChangeScreenState extends ConsumerState<PinChangeScreen> {
-  _PinStep _step = _PinStep.current;
+  late _PinStep _step =
+      widget.skipCurrent ? _PinStep.newPin : _PinStep.current;
   final List<String> _digits = [];
+  String? _currentPinValue;
   String _newPinValue = '';
   String? _errorMessage;
   bool _busy = false;
+
+  String get _title => widget.unlock
+      ? 'PIN de Desbloqueio'
+      : widget.level == null
+          ? 'Alterar PIN'
+          : 'PIN ${widget.level!.shortLabel}';
 
   // ── Input handlers ────────────────────────────────────────────────────────
 
@@ -76,44 +100,31 @@ class _PinChangeScreenState extends ConsumerState<PinChangeScreen> {
 
   Future<void> _validateCurrentPin(String entered) async {
     setState(() => _busy = true);
-    final db = ref.read(appDatabaseProvider);
+    final creds = ref.read(credentialsAdminProvider);
 
-    try {
-      final raw = await db.getMeta('credentials');
-      String storedPin = '';
-      if (raw != null && raw.isNotEmpty) {
-        final map = jsonDecode(raw) as Map<String, dynamic>;
-        storedPin = map['pin'] as String? ?? '';
-      }
+    final outcome = widget.unlock
+        ? await creds.verifyUnlockPin(entered)
+        : widget.level == null
+            ? await creds.verifyMasterPin(entered)
+            : await creds.verifyLevelPin(widget.level!, entered);
 
-      if (storedPin.isEmpty) {
-        if (mounted) {
-          _clearWithError('PIN não configurado.');
-          setState(() => _busy = false);
-        }
-        return;
-      }
+    if (!mounted) return;
+    setState(() => _busy = false);
 
-      if (entered == storedPin) {
-        if (mounted) {
-          setState(() {
-            _step = _PinStep.newPin;
-            _digits.clear();
-            _errorMessage = null;
-            _busy = false;
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() => _busy = false);
-          _clearWithError('PIN incorreto. Tente novamente.');
-        }
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() => _busy = false);
-        _clearWithError('Erro ao verificar PIN.');
-      }
+    switch (outcome) {
+      case VerifyOk():
+        setState(() {
+          _currentPinValue = entered;
+          _step = _PinStep.newPin;
+          _digits.clear();
+          _errorMessage = null;
+        });
+      case VerifyUnset():
+        _clearWithError('PIN não configurado.');
+      case VerifyLocked(:final remaining):
+        _clearWithError('Muitas tentativas. Aguarde ${remaining.inSeconds}s.');
+      case VerifyWrong():
+        _clearWithError('PIN incorreto. Tente novamente.');
     }
   }
 
@@ -138,33 +149,48 @@ class _PinChangeScreenState extends ConsumerState<PinChangeScreen> {
     }
 
     setState(() => _busy = true);
-    final db = ref.read(appDatabaseProvider);
+    final creds = ref.read(credentialsAdminProvider);
 
-    try {
-      final raw = await db.getMeta('credentials');
-      final map = raw != null && raw.isNotEmpty
-          ? jsonDecode(raw) as Map<String, dynamic>
-          : <String, dynamic>{};
-      map['pin'] = entered;
-      await db.setMeta('credentials', jsonEncode(map));
-      ref.invalidate(deviceCredentialsProvider);
+    final error = widget.unlock
+        ? await creds.changeUnlockPin(
+            currentPin: widget.skipCurrent ? null : _currentPinValue,
+            newPin: entered,
+            by: widget.editorRole,
+          )
+        : widget.level == null
+            ? await creds.changeMasterPin(
+                currentPin: _currentPinValue!,
+                newPin: entered,
+              )
+            : await creds.changeLevelPin(
+                level: widget.level!,
+                currentPin: widget.skipCurrent ? null : _currentPinValue,
+                newPin: entered,
+                by: widget.editorRole,
+              );
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('PIN alterado com sucesso.'),
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 2),
-          ),
-        );
-        Navigator.of(context).pop();
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() => _busy = false);
-        _clearWithError('Erro ao salvar PIN.');
-      }
+    if (!mounted) return;
+
+    if (error != null) {
+      setState(() {
+        _busy = false;
+        _step = _PinStep.newPin;
+        _newPinValue = '';
+        _digits.clear();
+      });
+      _clearWithError(error);
+      return;
     }
+
+    ref.invalidate(deviceCredentialsProvider);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('PIN alterado com sucesso.'),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 2),
+      ),
+    );
+    Navigator.of(context).pop(true);
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -180,7 +206,7 @@ class _PinChangeScreenState extends ConsumerState<PinChangeScreen> {
         elevation: 0,
         iconTheme: IconThemeData(color: context.textPrimary),
         title: Text(
-          'Alterar PIN',
+          _title,
           style: TextStyle(
             color: context.textPrimary,
             fontSize: 17,
@@ -208,7 +234,12 @@ class _PinChangeScreenState extends ConsumerState<PinChangeScreen> {
                   const SizedBox(height: 12),
 
                   // Step indicator
-                  _StepIndicator(current: _step),
+                  _StepIndicator(
+                    current: _step,
+                    steps: widget.skipCurrent
+                        ? const [_PinStep.newPin, _PinStep.confirm]
+                        : _PinStep.values,
+                  ),
                   const SizedBox(height: 32),
 
                   // Title
@@ -271,14 +302,15 @@ class _PinChangeScreenState extends ConsumerState<PinChangeScreen> {
 // ── Step indicator ────────────────────────────────────────────────────────────
 
 class _StepIndicator extends StatelessWidget {
-  const _StepIndicator({required this.current});
+  const _StepIndicator({required this.current, required this.steps});
   final _PinStep current;
+  final List<_PinStep> steps;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: _PinStep.values.map((step) {
+      children: steps.map((step) {
         final done = step.index < current.index;
         final active = step == current;
         final color = (done || active) ? AppColors.secondary : context.borderColor;
@@ -295,7 +327,7 @@ class _StepIndicator extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
-            if (step != _PinStep.values.last)
+            if (step != steps.last)
               AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
                 width: 12,

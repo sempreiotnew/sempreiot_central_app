@@ -15,19 +15,27 @@ import '../domain/entities/access_level.dart';
 import '../domain/entities/lookup_result.dart';
 import '../domain/entities/saved_central.dart';
 
-// ── Saved centrals (persisted in SharedPreferences) ───────────────────────────
+// ── Saved centrals (SharedPreferences cache, backend as source of truth) ─────
 
-const _prefsKey = 'saved_centrals';
+// Legacy single-key storage — shared across accounts, which leaked one
+// user's centrals into the next login on the same device. Removed on load.
+const _legacyPrefsKey = 'saved_centrals';
 
 class SavedCentralsNotifier extends StateNotifier<List<SavedCentral>> {
   SavedCentralsNotifier(this._ref) : super([]);
 
   final Ref _ref;
   ProviderSubscription<AsyncValue<dynamic>>? _sub;
+  String? _prefsKey; // per-user; null until load() resolves the signed-in user
 
   Future<void> load() async {
+    final user = await _ref.read(authNotifierProvider.future);
+    if (user == null || !mounted) return;
+    _prefsKey = 'saved_centrals_${user.userId}';
+
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_prefsKey);
+    await prefs.remove(_legacyPrefsKey);
+    final raw = prefs.getString(_prefsKey!);
     if (raw != null) {
       try {
         final list = jsonDecode(raw) as List<dynamic>;
@@ -38,7 +46,8 @@ class SavedCentralsNotifier extends StateNotifier<List<SavedCentral>> {
       } catch (_) {}
     }
 
-    // Sync statuses from backend to catch any MQTT messages missed while offline.
+    // Sync from backend: updates statuses missed while offline AND rebuilds
+    // entries missing locally (fresh install, cleared/foreign localStorage).
     _syncFromBackend();
 
     // Listen for real-time acceptance/rejection responses via MQTT
@@ -95,7 +104,40 @@ class SavedCentralsNotifier extends StateNotifier<List<SavedCentral>> {
           clearLevel: newLevel == null,
         );
       }).toList();
-      if (updated) {
+
+      // Rebuild entries the backend knows but local storage lost — the
+      // prefs are only a cache (web localStorage is per-origin and dev
+      // servers change ports; fresh installs start empty). The relation
+      // row only has the central's identityId, so name/subId come from a
+      // reverse lookup. REJECTED rows are skipped: an absent local card
+      // for one means the user dismissed it on purpose.
+      final known = next.map((c) => c.identityId).toSet();
+      for (final r in requests) {
+        final cid = r['centralIdentityId'] as String? ?? '';
+        final status = r['status'] as String? ?? '';
+        if (cid.isEmpty || known.contains(cid)) continue;
+        if (status != 'PENDING' && status != 'ACCEPTED' && status != 'BLOCKED') {
+          continue;
+        }
+        try {
+          final info = await LookupApiService.lookupByIdentityId(cid);
+          next.add(SavedCentral(
+            subId: info.subId,
+            identityId: cid,
+            name: info.displayName,
+            status: status,
+            level: AccessLevel.fromWire(r['level'] as String?),
+            addedAt: DateTime.tryParse(r['requestedAt'] as String? ?? '') ??
+                DateTime.now(),
+          ));
+          known.add(cid);
+          updated = true;
+        } catch (e) {
+          debugPrint('[UserAccess] could not rebuild central $cid: $e');
+        }
+      }
+
+      if (updated && mounted) {
         state = next;
         await _persist();
       }
@@ -146,9 +188,11 @@ class SavedCentralsNotifier extends StateNotifier<List<SavedCentral>> {
   }
 
   Future<void> _persist() async {
+    final key = _prefsKey;
+    if (key == null) return; // no signed-in user resolved yet
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
-      _prefsKey,
+      key,
       jsonEncode(state.map((c) => c.toMap()).toList()),
     );
   }
@@ -162,6 +206,10 @@ class SavedCentralsNotifier extends StateNotifier<List<SavedCentral>> {
 
 final savedCentralsProvider =
     StateNotifierProvider<SavedCentralsNotifier, List<SavedCentral>>((ref) {
+  // Rebuild on login/logout/account switch: watching the user's sub means a
+  // different account gets a fresh notifier (and its own prefs key) instead
+  // of inheriting the previous user's in-memory list.
+  ref.watch(authNotifierProvider.select((s) => s.valueOrNull?.userId));
   final notifier = SavedCentralsNotifier(ref);
   notifier.load();
   return notifier;

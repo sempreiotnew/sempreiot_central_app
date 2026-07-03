@@ -1,35 +1,65 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/database/app_database.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/theme_ext.dart';
-import '../../../../shared/widgets/pin_pad.dart';
 import '../../../access/application/central_access_provider.dart';
 import '../../../access/domain/entities/access_level.dart';
 import '../../../access/domain/entities/access_relation.dart';
 import '../../../access/presentation/screens/my_qr_screen.dart';
-import '../../application/device_metadata_providers.dart';
+import '../../application/credentials_admin_provider.dart';
 import '../widgets/device_detail_widgets.dart';
-import 'pin_change_screen.dart';
+import '../widgets/editor_gate.dart';
+import 'access_pins_screen.dart';
 
-class DeviceAccessScreen extends ConsumerWidget {
+/// Access management for this central. The whole screen is gated: entering
+/// requires the Master or Nível 4 PIN, and the proven role is attached to
+/// every action taken here — so the audit trail always knows who touched
+/// what. The role dies with the screen.
+class DeviceAccessScreen extends ConsumerStatefulWidget {
   const DeviceAccessScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final credAsync = ref.watch(deviceCredentialsProvider);
+  ConsumerState<DeviceAccessScreen> createState() => _DeviceAccessScreenState();
+}
+
+class _DeviceAccessScreenState extends ConsumerState<DeviceAccessScreen> {
+  EditorRole? _role;
+
+  @override
+  Widget build(BuildContext context) {
+    final role = _role;
+    if (role == null) {
+      return Scaffold(
+        backgroundColor: context.bgColor,
+        appBar: AppBar(
+          backgroundColor: context.bgColor,
+          elevation: 0,
+          iconTheme: IconThemeData(color: context.textPrimary),
+          title: Text(
+            'Acessos',
+            style: TextStyle(
+              color: context.textPrimary,
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        body: EditorGate(
+          subtitle: 'Digite o PIN Master ou o PIN de Nível 4\n'
+              'para gerenciar os acessos desta central.',
+          onUnlocked: (r) => setState(() => _role = r),
+        ),
+      );
+    }
+
     final pending = ref.watch(centralPendingRequestsProvider);
     final granted = ref.watch(centralGrantedProvider);
     final blocked = ref.watch(centralBlockedProvider);
+    final syncing = ref.watch(centralAccessSyncingProvider);
     final centralIdAsync = ref.watch(centralIdProvider);
     final centralId = centralIdAsync.valueOrNull ?? '';
-
-    final cred = credAsync.valueOrNull ?? {};
-    final isLoading = credAsync.isLoading;
 
     return Scaffold(
       backgroundColor: context.bgColor,
@@ -64,9 +94,7 @@ class DeviceAccessScreen extends ConsumerWidget {
           ),
         ),
       ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
+      body: RefreshIndicator(
               onRefresh: () => ref.read(centralAccessRelationsProvider.notifier).refresh(),
               child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
@@ -81,6 +109,7 @@ class DeviceAccessScreen extends ConsumerWidget {
                       child: _PendingRequestCard(
                         relation: rel,
                         centralId: centralId,
+                        actor: role.auditName,
                       ),
                     ),
                   ),
@@ -93,7 +122,8 @@ class DeviceAccessScreen extends ConsumerWidget {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: Text(
-                    'PIN, root e senha podem ser alterados após a inicialização.',
+                    'PINs de nível, root e senha são gerenciados em PINs de '
+                    'Acesso (restrito a Master e Administrador).',
                     style: TextStyle(
                       color: context.textSecondary,
                       fontSize: 12,
@@ -102,24 +132,61 @@ class DeviceAccessScreen extends ConsumerWidget {
                 ),
                 InfoCard(
                   children: [
-                    _PinRow(hasPin: (cred['pin'] as String? ?? '').isNotEmpty),
-                    const InfoRowDivider(),
-                    _EditableRow(
-                      label: 'Root',
-                      value: cred['root'] as String? ?? '',
-                      icon: Icons.manage_accounts_rounded,
-                      onSave: (val) => _saveCredential(
-                        context, ref, cred, 'root', val,
+                    InkWell(
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => AccessPinsScreen(initialRole: role),
+                        ),
                       ),
-                    ),
-                    const InfoRowDivider(),
-                    _EditableRow(
-                      label: 'Senha',
-                      value: cred['password'] as String? ?? '',
-                      icon: Icons.lock_outline_rounded,
-                      obscure: true,
-                      onSave: (val) => _saveCredential(
-                        context, ref, cred, 'password', val,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: AppColors.secondary.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.admin_panel_settings_rounded,
+                                size: 18,
+                                color: AppColors.secondary,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'PINs de Acesso',
+                                    style: TextStyle(
+                                      color: context.textSecondary,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Níveis, root, senha e auditoria',
+                                    style: TextStyle(
+                                      color: context.textPrimary,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              size: 18,
+                              color: AppColors.secondary.withValues(alpha: 0.7),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -129,7 +196,21 @@ class DeviceAccessScreen extends ConsumerWidget {
                 // ── ACESSO CONCEDIDO ─────────────────────────────────────
                 const InfoSectionHeader('ACESSO CONCEDIDO'),
                 const SizedBox(height: 10),
-                if (granted.isEmpty)
+                if (granted.isEmpty && syncing)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    child: Center(
+                      child: SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.secondary,
+                        ),
+                      ),
+                    ),
+                  )
+                else if (granted.isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Text(
@@ -144,7 +225,11 @@ class DeviceAccessScreen extends ConsumerWidget {
                   ...granted.map(
                     (rel) => Padding(
                       padding: const EdgeInsets.only(bottom: 8),
-                      child: _GrantedUserCard(relation: rel, centralId: centralId),
+                      child: _GrantedUserCard(
+                        relation: rel,
+                        centralId: centralId,
+                        actor: role,
+                      ),
                     ),
                   ),
                 const SizedBox(height: 4),
@@ -158,7 +243,7 @@ class DeviceAccessScreen extends ConsumerWidget {
                   ...blocked.map(
                     (rel) => Padding(
                       padding: const EdgeInsets.only(bottom: 8),
-                      child: _BlockedUserCard(relation: rel),
+                      child: _BlockedUserCard(relation: rel, actor: role.auditName),
                     ),
                   ),
                 ],
@@ -168,27 +253,6 @@ class DeviceAccessScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _saveCredential(
-    BuildContext context,
-    WidgetRef ref,
-    Map<String, dynamic> current,
-    String field,
-    String value,
-  ) async {
-    final db = ref.read(appDatabaseProvider);
-    final updated = Map<String, dynamic>.from(current)..[field] = value;
-    await db.setMeta('credentials', jsonEncode(updated));
-    ref.invalidate(deviceCredentialsProvider);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('$field atualizado com sucesso.'),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
-  }
 }
 
 // ── PIN row ───────────────────────────────────────────────────────────────────
@@ -235,345 +299,17 @@ class _RefreshButtonState extends ConsumerState<_RefreshButton> {
   }
 }
 
-class _PinRow extends StatelessWidget {
-  const _PinRow({required this.hasPin});
-  final bool hasPin;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const PinChangeScreen()),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: AppColors.secondary.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.pin_rounded,
-                size: 18,
-                color: AppColors.secondary,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'PIN',
-                    style: TextStyle(
-                      color: context.textSecondary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    hasPin ? '••••••' : 'Não definido',
-                    style: TextStyle(
-                      color: hasPin
-                          ? context.textPrimary
-                          : context.textSecondary.withValues(alpha: 0.4),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 18,
-              color: AppColors.secondary.withValues(alpha: 0.7),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Editable row ──────────────────────────────────────────────────────────────
-
-class _EditableRow extends StatelessWidget {
-  const _EditableRow({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.onSave,
-    this.obscure = false,
-  });
-
-  final String label;
-  final String value;
-  final IconData icon;
-  final Future<void> Function(String) onSave;
-  final bool obscure;
-
-  @override
-  Widget build(BuildContext context) {
-    final empty = value.isEmpty;
-
-    return InkWell(
-      onTap: () => showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (ctx) => _EditSheet(
-          label: label,
-          currentValue: value,
-          obscure: obscure,
-          onSave: onSave,
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: AppColors.secondary.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, size: 18, color: AppColors.secondary),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: context.textSecondary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    empty
-                        ? 'Não definido'
-                        : (obscure ? '•' * value.length.clamp(0, 8) : value),
-                    style: TextStyle(
-                      color: empty
-                          ? context.textSecondary.withValues(alpha: 0.4)
-                          : context.textPrimary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.edit_rounded,
-              size: 16,
-              color: AppColors.secondary.withValues(alpha: 0.7),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Edit bottom sheet ─────────────────────────────────────────────────────────
-
-class _EditSheet extends StatefulWidget {
-  const _EditSheet({
-    required this.label,
-    required this.currentValue,
-    required this.onSave,
-    this.obscure = false,
-  });
-
-  final String label;
-  final String currentValue;
-  final Future<void> Function(String) onSave;
-  final bool obscure;
-
-  @override
-  State<_EditSheet> createState() => _EditSheetState();
-}
-
-class _EditSheetState extends State<_EditSheet> {
-  late final TextEditingController _ctrl;
-  bool _saving = false;
-  bool _showText = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = TextEditingController(text: widget.currentValue);
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    final val = _ctrl.text.trim();
-    if (val == widget.currentValue) {
-      Navigator.of(context).pop();
-      return;
-    }
-    setState(() => _saving = true);
-    await widget.onSave(val);
-    if (mounted) Navigator.of(context).pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 20),
-              decoration: BoxDecoration(
-                color: context.borderColor,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          Text(
-            'Editar ${widget.label}',
-            style: TextStyle(
-              color: context.textPrimary,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            decoration: BoxDecoration(
-              color: context.bgColor,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: AppColors.secondary.withValues(alpha: 0.4),
-                width: 1.2,
-              ),
-            ),
-            child: TextField(
-              controller: _ctrl,
-              autofocus: true,
-              obscureText: widget.obscure && !_showText,
-              style: TextStyle(
-                color: context.textPrimary,
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-              ),
-              decoration: InputDecoration(
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 14,
-                ),
-                border: InputBorder.none,
-                counterText: '',
-                suffixIcon: widget.obscure
-                    ? IconButton(
-                        icon: Icon(
-                          _showText
-                              ? Icons.visibility_off_rounded
-                              : Icons.visibility_rounded,
-                          size: 18,
-                          color: context.textSecondary,
-                        ),
-                        onPressed: () =>
-                            setState(() => _showText = !_showText),
-                      )
-                    : null,
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed:
-                      _saving ? null : () => Navigator.of(context).pop(),
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: context.borderColor, width: 0.8),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(
-                    'Cancelar',
-                    style: TextStyle(color: context.textSecondary),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton(
-                  onPressed: _saving ? null : _save,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.secondary,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: _saving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text(
-                          'Salvar',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 // ── Granted user card ─────────────────────────────────────────────────────────
 
 class _GrantedUserCard extends ConsumerWidget {
-  const _GrantedUserCard({required this.relation, required this.centralId});
+  const _GrantedUserCard({
+    required this.relation,
+    required this.centralId,
+    required this.actor,
+  });
   final AccessRelation relation;
   final String centralId;
+  final EditorRole actor;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -683,17 +419,24 @@ class _GrantedUserCard extends ConsumerWidget {
               context: context,
               isScrollControlled: true,
               backgroundColor: Colors.transparent,
-              builder: (_) => _LevelChangeSheet(relation: relation, centralId: centralId),
+              builder: (_) => _LevelChangeSheet(
+                relation: relation,
+                centralId: centralId,
+                actor: actor,
+              ),
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.block_rounded, size: 18, color: AppColors.error),
-            tooltip: 'Bloquear',
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            onPressed: () => _confirmBlock(context, ref, relation, centralId),
-          ),
+          // MASTER cannot be kicked: no block action. The only way out is a
+          // root-authorized demotion via the level-change sheet.
+          if (level != AccessLevel.master)
+            IconButton(
+              icon: const Icon(Icons.block_rounded, size: 18, color: AppColors.error),
+              tooltip: 'Bloquear',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              onPressed: () => _confirmBlock(context, ref, relation, centralId, actor.auditName),
+            ),
         ],
       ),
     );
@@ -703,8 +446,9 @@ class _GrantedUserCard extends ConsumerWidget {
 // ── Blocked user card ─────────────────────────────────────────────────────────
 
 class _BlockedUserCard extends ConsumerStatefulWidget {
-  const _BlockedUserCard({required this.relation});
+  const _BlockedUserCard({required this.relation, required this.actor});
   final AccessRelation relation;
+  final String actor;
 
   @override
   ConsumerState<_BlockedUserCard> createState() => _BlockedUserCardState();
@@ -716,7 +460,9 @@ class _BlockedUserCardState extends ConsumerState<_BlockedUserCard> {
   Future<void> _unblock() async {
     setState(() => _loading = true);
     try {
-      await ref.read(centralAccessRelationsProvider.notifier).unblock(relation: widget.relation);
+      await ref
+          .read(centralAccessRelationsProvider.notifier)
+          .unblock(relation: widget.relation, actor: widget.actor);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -783,6 +529,7 @@ Future<void> _confirmBlock(
   WidgetRef ref,
   AccessRelation relation,
   String centralId,
+  String actor,
 ) async {
   final confirmed = await showDialog<bool>(
     context: context,
@@ -808,7 +555,9 @@ Future<void> _confirmBlock(
   if (confirmed != true) return;
 
   try {
-    await ref.read(centralAccessRelationsProvider.notifier).block(relation: relation, centralId: centralId);
+    await ref
+        .read(centralAccessRelationsProvider.notifier)
+        .block(relation: relation, centralId: centralId, actor: actor);
   } catch (e) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -821,9 +570,17 @@ Future<void> _confirmBlock(
 // ── Level-change PIN sheet ──────────────────────────────────────────────────
 
 class _LevelChangeSheet extends ConsumerStatefulWidget {
-  const _LevelChangeSheet({required this.relation, required this.centralId});
+  const _LevelChangeSheet({
+    required this.relation,
+    required this.centralId,
+    required this.actor,
+  });
   final AccessRelation relation;
   final String centralId;
+
+  /// Role proven at the Acessos screen gate — the authority for the change
+  /// (Nível 4 or Master) and the actor recorded in the audit trail.
+  final EditorRole actor;
 
   @override
   ConsumerState<_LevelChangeSheet> createState() => _LevelChangeSheetState();
@@ -831,70 +588,88 @@ class _LevelChangeSheet extends ConsumerStatefulWidget {
 
 class _LevelChangeSheetState extends ConsumerState<_LevelChangeSheet> {
   AccessLevel? _selected;
-  final List<String> _digits = [];
+  final _rootCtrl = TextEditingController();
+  final _senhaCtrl = TextEditingController();
   String? _error;
   bool _saving = false;
+
+  /// Granting MASTER or demoting the current MASTER — both are gated by the
+  /// root + senha device-ownership credentials on top of the screen gate.
+  bool get _isMasterOp =>
+      _selected == AccessLevel.master ||
+      widget.relation.level == AccessLevel.master;
+
+  @override
+  void dispose() {
+    _rootCtrl.dispose();
+    _senhaCtrl.dispose();
+    super.dispose();
+  }
 
   void _selectLevel(AccessLevel level) {
     if (_saving) return;
     setState(() {
       _selected = level;
-      _digits.clear();
       _error = null;
     });
   }
 
-  void _onDigit(String d) {
-    if (_selected == null || _digits.length >= 6 || _saving) return;
-    setState(() {
-      _digits.add(d);
-      _error = null;
-    });
-    if (_digits.length == 6) _submit();
-  }
-
-  void _onDelete() {
-    if (_digits.isEmpty || _saving) return;
-    setState(() => _digits.removeLast());
-  }
-
-  Future<void> _submit() async {
+  Future<void> _submitMasterOp() async {
     final level = _selected!;
-    final entered = _digits.join();
 
-    String expectedPin;
+    // Only one MASTER per central, ever.
     if (level == AccessLevel.master) {
-      final db = ref.read(appDatabaseProvider);
-      final raw = await db.getMeta('credentials');
-      final map = raw != null && raw.isNotEmpty
-          ? jsonDecode(raw) as Map<String, dynamic>
-          : <String, dynamic>{};
-      expectedPin = map['pin'] as String? ?? '';
-      if (expectedPin.isEmpty) {
-        setState(() {
-          _error = 'PIN da central não configurado em Credenciais.';
-          _digits.clear();
-        });
+      final hasOtherMaster = ref.read(centralGrantedProvider).any((r) =>
+          r.level == AccessLevel.master &&
+          r.userSubId != widget.relation.userSubId);
+      if (hasOtherMaster) {
+        setState(() => _error = 'Já existe um usuário MASTER nesta central.');
         return;
       }
-    } else {
-      expectedPin = level.fixedPin!;
-    }
-
-    if (entered != expectedPin) {
-      setState(() => _error = 'PIN incorreto.');
-      Future.delayed(const Duration(milliseconds: 700), () {
-        if (mounted) setState(() => _digits.clear());
-      });
-      return;
     }
 
     setState(() => _saving = true);
+    final outcome = await ref
+        .read(credentialsAdminProvider)
+        .verifyRootCredentials(_rootCtrl.text.trim(), _senhaCtrl.text);
+    if (!mounted) return;
+
+    switch (outcome) {
+      case VerifyOk():
+        break;
+      case VerifyUnset():
+        setState(() {
+          _saving = false;
+          _error = 'Credenciais root não configuradas.';
+        });
+        return;
+      case VerifyLocked(:final remaining):
+        setState(() {
+          _saving = false;
+          _error = 'Muitas tentativas. Aguarde ${remaining.inSeconds}s.';
+        });
+        return;
+      case VerifyWrong():
+        setState(() {
+          _saving = false;
+          _error = 'Root ou senha incorretos.';
+        });
+        return;
+    }
+
+    await _applyChange(level, alreadySaving: true);
+  }
+
+  Future<void> _applyChange(AccessLevel level, {bool alreadySaving = false}) async {
+    if (!alreadySaving) setState(() => _saving = true);
     try {
       await ref.read(centralAccessRelationsProvider.notifier).changeLevel(
             relation: widget.relation,
             level: level,
             centralId: widget.centralId,
+            masterRemoval: widget.relation.level == AccessLevel.master &&
+                level != AccessLevel.master,
+            actor: widget.actor.auditName,
           );
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -902,7 +677,6 @@ class _LevelChangeSheetState extends ConsumerState<_LevelChangeSheet> {
         setState(() {
           _saving = false;
           _error = 'Erro ao alterar nível.';
-          _digits.clear();
         });
       }
     }
@@ -975,34 +749,128 @@ class _LevelChangeSheetState extends ConsumerState<_LevelChangeSheet> {
                 );
               }).toList(),
             ),
-            if (_selected != null) ...[
+            if (_selected != null && _isMasterOp) ...[
               const SizedBox(height: 24),
               Center(
                 child: Text(
                   _selected == AccessLevel.master
-                      ? 'Digite o PIN da central'
-                      : 'Digite o PIN de ${_selected!.label}',
+                      ? 'Conceder MASTER exige as credenciais root desta central.'
+                      : 'Remover o usuário MASTER exige as credenciais root desta central.',
+                  textAlign: TextAlign.center,
                   style: TextStyle(color: context.textSecondary, fontSize: 13),
                 ),
               ),
               const SizedBox(height: 16),
-              Center(child: PinDots(filledCount: _digits.length, hasError: _error != null)),
+              _RootCredentialField(controller: _rootCtrl, hint: 'Root'),
               const SizedBox(height: 10),
-              Center(
-                child: AnimatedOpacity(
-                  opacity: _error != null ? 1 : 0,
-                  duration: const Duration(milliseconds: 200),
-                  child: Text(_error ?? '', style: const TextStyle(color: AppColors.error, fontSize: 12)),
+              _RootCredentialField(controller: _senhaCtrl, hint: 'Senha', obscure: true),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Center(
+                  child: Text(_error!, style: const TextStyle(color: AppColors.error, fontSize: 12)),
+                ),
+              ],
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _saving ? null : _submitMasterOp,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AccessLevel.master.color,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: _saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text(
+                          'Confirmar',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                        ),
                 ),
               ),
-              const SizedBox(height: 20),
-              AnimatedOpacity(
-                opacity: _saving ? 0.4 : 1,
-                duration: const Duration(milliseconds: 200),
-                child: PinPad(onDigit: _onDigit, onDelete: _onDelete),
+            ] else if (_selected != null && _selected != widget.relation.level) ...[
+              const SizedBox(height: 24),
+              Center(
+                child: Text(
+                  'Alterar para ${_selected!.label}, autorizado como ${widget.actor.label}.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: context.textSecondary, fontSize: 13),
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Center(
+                  child: Text(_error!, style: const TextStyle(color: AppColors.error, fontSize: 12)),
+                ),
+              ],
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _saving ? null : () => _applyChange(_selected!),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _selected!.color,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: _saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : Text(
+                          'Confirmar ${_selected!.shortLabel}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                        ),
+                ),
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RootCredentialField extends StatelessWidget {
+  const _RootCredentialField({
+    required this.controller,
+    required this.hint,
+    this.obscure = false,
+  });
+
+  final TextEditingController controller;
+  final String hint;
+  final bool obscure;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: context.bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AccessLevel.master.color.withValues(alpha: 0.35),
+          width: 1.2,
+        ),
+      ),
+      child: TextField(
+        controller: controller,
+        obscureText: obscure,
+        style: TextStyle(color: context.textPrimary, fontSize: 14),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: TextStyle(
+            color: context.textSecondary.withValues(alpha: 0.5),
+            fontSize: 13,
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          border: InputBorder.none,
         ),
       ),
     );
@@ -1120,10 +988,12 @@ class _PendingRequestCard extends ConsumerStatefulWidget {
   const _PendingRequestCard({
     required this.relation,
     required this.centralId,
+    required this.actor,
   });
 
   final AccessRelation relation;
   final String centralId;
+  final String actor;
 
   @override
   ConsumerState<_PendingRequestCard> createState() =>
@@ -1141,6 +1011,7 @@ class _PendingRequestCardState extends ConsumerState<_PendingRequestCard> {
             relation: widget.relation,
             decision: decision,
             centralId: widget.centralId,
+            actor: widget.actor,
           );
     } catch (e) {
       if (mounted) {
@@ -1163,6 +1034,7 @@ class _PendingRequestCardState extends ConsumerState<_PendingRequestCard> {
       await ref.read(centralAccessRelationsProvider.notifier).block(
             relation: widget.relation,
             centralId: widget.centralId,
+            actor: widget.actor,
           );
     } catch (e) {
       if (mounted) {

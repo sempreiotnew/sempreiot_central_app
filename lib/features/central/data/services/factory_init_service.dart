@@ -10,10 +10,16 @@ import '../../../../core/database/app_database.dart';
 /// ```json
 /// {
 ///   "info":        {"firmware_version":"1.0","hash":"abc","old_hash":"","created_at":"2024-01-01","updated_at":"2024-01-01"},
-///   "credentials": {"pin":"123456","root":"admin","password":"secret"},
+///   "credentials": {"pin":"123456","unlock_pin":"654321","root":"admin","password":"secret",
+///                   "level_pins":{"LEVEL_1":"111111","LEVEL_2":"222222","LEVEL_3":"333333","LEVEL_4":"444444"}},
 ///   "access":      {"subId":"sub-xxxx"}
 /// }
 /// ```
+///
+/// Credential values arrive in plaintext here and are hashed (salted
+/// SHA-256) in place by CredentialsAdminService on first access — only
+/// hashes are ever stored. Level PINs left out stay unset: the matching
+/// tier can't be granted until the Master configures a PIN for it.
 ///
 /// All keys are written unconditionally (factory reset semantics).
 class FactoryInitService {

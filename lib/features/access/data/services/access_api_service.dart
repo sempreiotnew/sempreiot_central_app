@@ -66,14 +66,17 @@ class AccessApiService {
       );
 
   /// Changes an already-accepted user's level. The PIN for [level] (or the
-  /// central's own PIN for Master) is verified locally on the central device
-  /// before this is called — this endpoint trusts the caller.
+  /// root credentials for MASTER operations) is verified locally on the
+  /// central device before this is called. [masterRemoval] must be set when
+  /// demoting the MASTER user — the backend refuses to touch a MASTER
+  /// relation without it.
   static Future<void> changeLevel({
     required String centralIdentityId,
     required String userSubId,
     required String level, // AccessLevel.wireValue
     required String centralId,
     required Future<String> Function() getToken,
+    bool masterRemoval = false,
   }) =>
       _post(
         action: 'LEVEL_CHANGE',
@@ -82,6 +85,7 @@ class AccessApiService {
           'userSubId': userSubId,
           'level': level,
           'centralId': centralId,
+          if (masterRemoval) 'masterRemoval': true,
         },
         getToken: getToken,
       );

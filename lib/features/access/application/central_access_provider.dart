@@ -92,6 +92,7 @@ class CentralAccessRelationsNotifier extends StateNotifier<List<AccessRelation>>
       final centralIdentityId = _ref.read(centralMqttRepositoryProvider).identityId;
       if (centralIdentityId == null || centralIdentityId.isEmpty) return false;
 
+      _ref.read(centralAccessSyncingProvider.notifier).state = true;
       final db = _ref.read(appDatabaseProvider);
       final service = CentralCredentialsService(db: db);
       final items = await AccessApiService.getAllForCentral(
@@ -105,6 +106,8 @@ class CentralAccessRelationsNotifier extends StateNotifier<List<AccessRelation>>
     } catch (e) {
       debugPrint('[CentralAccess] backend sync failed: $e');
       return false;
+    } finally {
+      _ref.read(centralAccessSyncingProvider.notifier).state = false;
     }
   }
 
@@ -159,6 +162,7 @@ class CentralAccessRelationsNotifier extends StateNotifier<List<AccessRelation>>
     required AccessRelation relation,
     required String decision, // 'ACCEPTED' | 'REJECTED'
     required String centralId,
+    String actor = 'central',
   }) =>
       _runMutation(() async {
         final db = _ref.read(appDatabaseProvider);
@@ -171,6 +175,11 @@ class CentralAccessRelationsNotifier extends StateNotifier<List<AccessRelation>>
           getToken: service.getIdToken,
         );
         final now = DateTime.now();
+        await db.addAudit(
+          actor,
+          decision == 'ACCEPTED' ? 'access_accepted' : 'access_rejected',
+          {'userSubId': relation.userSubId},
+        );
         _replaceOne(relation.copyWith(
           status: decision,
           level: decision == 'ACCEPTED' ? AccessLevel.level1 : null,
@@ -184,6 +193,8 @@ class CentralAccessRelationsNotifier extends StateNotifier<List<AccessRelation>>
     required AccessRelation relation,
     required AccessLevel level,
     required String centralId,
+    bool masterRemoval = false,
+    String actor = 'central',
   }) =>
       _runMutation(() async {
         final db = _ref.read(appDatabaseProvider);
@@ -194,6 +205,15 @@ class CentralAccessRelationsNotifier extends StateNotifier<List<AccessRelation>>
           level: level.wireValue,
           centralId: centralId,
           getToken: service.getIdToken,
+          masterRemoval: masterRemoval,
+        );
+        final isMasterOp = level == AccessLevel.master || masterRemoval;
+        await db.addAudit(
+          isMasterOp ? 'root' : actor,
+          level == AccessLevel.master
+              ? 'master_granted'
+              : (masterRemoval ? 'master_removed' : 'level_changed'),
+          {'userSubId': relation.userSubId, 'level': level.wireValue},
         );
         _replaceOne(relation.copyWith(level: level, updatedAt: DateTime.now()));
       });
@@ -201,6 +221,7 @@ class CentralAccessRelationsNotifier extends StateNotifier<List<AccessRelation>>
   Future<void> block({
     required AccessRelation relation,
     required String centralId,
+    String actor = 'central',
   }) =>
       _runMutation(() async {
         final db = _ref.read(appDatabaseProvider);
@@ -211,6 +232,7 @@ class CentralAccessRelationsNotifier extends StateNotifier<List<AccessRelation>>
           centralId: centralId,
           getToken: service.getIdToken,
         );
+        await db.addAudit(actor, 'user_blocked', {'userSubId': relation.userSubId});
         _replaceOne(relation.copyWith(
           status: 'BLOCKED',
           clearLevel: true,
@@ -218,7 +240,11 @@ class CentralAccessRelationsNotifier extends StateNotifier<List<AccessRelation>>
         ));
       });
 
-  Future<void> unblock({required AccessRelation relation}) => _runMutation(() async {
+  Future<void> unblock({
+    required AccessRelation relation,
+    String actor = 'central',
+  }) =>
+      _runMutation(() async {
         final db = _ref.read(appDatabaseProvider);
         final service = CentralCredentialsService(db: db);
         await AccessApiService.unblock(
@@ -226,6 +252,7 @@ class CentralAccessRelationsNotifier extends StateNotifier<List<AccessRelation>>
           userSubId: relation.userSubId,
           getToken: service.getIdToken,
         );
+        await db.addAudit(actor, 'user_unblocked', {'userSubId': relation.userSubId});
         _replaceOne(relation.copyWith(
           status: 'REJECTED',
           clearLevel: true,
@@ -264,6 +291,10 @@ final centralAccessRelationsProvider =
   notifier.init();
   return notifier;
 });
+
+/// True while a backend sync is in flight — lets the UI show a loading
+/// state instead of a misleading "no users" while the list is still coming.
+final centralAccessSyncingProvider = StateProvider<bool>((_) => false);
 
 final centralPendingRequestsProvider = Provider<List<AccessRelation>>((ref) {
   return ref.watch(centralAccessRelationsProvider).where((r) => r.isPending).toList();

@@ -25,12 +25,23 @@ class DeviceMetadata extends Table {
   Set<Column> get primaryKey => {key};
 }
 
-@DriftDatabase(tables: [SerialPackets, DeviceMetadata])
+/// Append-only trail of security-relevant events on this central: PIN
+/// changes, grants/blocks, unlock failures, master add/remove. Detail is a
+/// small JSON payload and must never contain a PIN or password.
+class AuditEvents extends Table {
+  IntColumn get id       => integer().autoIncrement()();
+  DateTimeColumn get at  => dateTime()();
+  TextColumn get actor   => text()(); // 'master' | 'admin' | 'root' | 'system'
+  TextColumn get action  => text()(); // e.g. 'pin_changed', 'master_granted'
+  TextColumn get detail  => text()(); // JSON
+}
+
+@DriftDatabase(tables: [SerialPackets, DeviceMetadata, AuditEvents])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(driftDatabase(name: 'sempreiot'));
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -48,6 +59,9 @@ class AppDatabase extends _$AppDatabase {
       if (from < 3) {
         // Seeds new defaults; insertOrIgnore preserves existing rows.
         await seedDefaultMetadata();
+      }
+      if (from < 4) {
+        await m.createTable(auditEvents);
       }
     },
   );
@@ -76,7 +90,8 @@ class AppDatabase extends _$AppDatabase {
       'created_at': '',
       'updated_at': '',
     });
-    await seed('credentials', {'pin': '', 'root': '', 'password': ''});
+    await seed('credentials',
+        {'pin': '', 'root': '', 'password': '', 'level_pins': <String, String>{}});
     await seed('access', <dynamic>[]);
     await seed('iot', {'iot_client_id': '', 'iot_password': ''});
   }
@@ -95,6 +110,21 @@ class AppDatabase extends _$AppDatabase {
         .getSingleOrNull();
     return row?.value;
   }
+
+  // Audit trail helpers
+  Future<void> addAudit(String actor, String action, Map<String, Object?> detail) =>
+      into(auditEvents).insert(AuditEventsCompanion.insert(
+        at: DateTime.now(),
+        actor: actor,
+        action: action,
+        detail: jsonEncode(detail),
+      ));
+
+  Future<List<AuditEvent>> recentAudit({int limit = 100}) =>
+      (select(auditEvents)
+            ..orderBy([(t) => OrderingTerm.desc(t.at)])
+            ..limit(limit))
+          .get();
 }
 
 final appDatabaseProvider = Provider<AppDatabase>((ref) {

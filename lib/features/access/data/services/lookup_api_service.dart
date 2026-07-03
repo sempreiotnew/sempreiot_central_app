@@ -12,13 +12,21 @@ class LookupApiService {
 
   /// Look up a subId in Device (type=central) or User (type=user) table.
   /// Uses the current Amplify session JWT for authentication.
-  static Future<LookupResult> lookup(String subId, {String? type}) async {
+  static Future<LookupResult> lookup(String subId, {String? type}) =>
+      _get({'subId': subId, if (type != null) 'type': type});
+
+  /// Reverse lookup by the central's identityId — used to rebuild the
+  /// saved-centrals list from backend relation rows, which only carry the
+  /// identityId.
+  static Future<LookupResult> lookupByIdentityId(String identityId) =>
+      _get({'identityId': identityId});
+
+  static Future<LookupResult> _get(Map<String, String> params) async {
     final session =
         await Amplify.Auth.fetchAuthSession() as CognitoAuthSession;
     final token =
         session.userPoolTokensResult.value.idToken.raw;
 
-    final params = {'subId': subId, if (type != null) 'type': type};
     final uri = Uri.parse('$_base/lookup').replace(queryParameters: params);
 
     debugPrint('[Lookup] GET $uri');
