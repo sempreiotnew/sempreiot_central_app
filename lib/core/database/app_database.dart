@@ -85,8 +85,8 @@ class AppDatabase extends _$AppDatabase {
     await seed('info', {
       'name': '',
       'firmware_version': '',
-      'hash': '',
-      'old_hash': '',
+      'subId': '',
+      'old_subId': '',
       'created_at': '',
       'updated_at': '',
     });

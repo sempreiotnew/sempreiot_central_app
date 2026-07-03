@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class AccessApiService {
-  static const _base = 'https://czbtuf62d0.execute-api.us-east-1.amazonaws.com';
+  static const _base = 'https://api.sempreiot.com';
 
   /// Every relationship row (pending/accepted/rejected/blocked) for [userSubId].
   static Future<List<Map<String, dynamic>>> getRequestsForUser({

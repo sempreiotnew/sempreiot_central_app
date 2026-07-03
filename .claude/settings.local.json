@@ -42,7 +42,14 @@
       "Bash(aws service-quotas *)",
       "Bash(aws sns *)",
       "Bash(aws sesv2 *)",
-      "Bash(aws route53 *)"
+      "Bash(aws route53 *)",
+      "Bash(aws apigatewayv2 *)",
+      "Bash(python3 -c \"import json,sys; fs=json.load\\(sys.stdin\\); [print\\(f['Name'], '→', json.dumps\\({k:\\(v if not any\\(s in k.upper\\(\\) for s in ['SECRET','PASSWORD','KEY','TOKEN']\\) else '<redacted>'\\) for k,v in \\(f['Env'] or {}\\).items\\(\\)}\\)\\) for f in fs]\")",
+      "Bash(curl -sI -m 10 https://api.sempreiot.com/)",
+      "Bash(aws acm list-certificates *)",
+      "Bash(aws acm describe-certificate *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -m 10 \"https://czbtuf62d0.execute-api.us-east-1.amazonaws.com/lookup?email=x@x.com\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -m 10 \"https://api.sempreiot.com/lookup?email=x@x.com\")"
     ]
   }
 }

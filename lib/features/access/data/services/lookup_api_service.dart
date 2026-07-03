@@ -8,7 +8,7 @@ import 'package:http/http.dart' as http;
 import '../../domain/entities/lookup_result.dart';
 
 class LookupApiService {
-  static const _base = 'https://czbtuf62d0.execute-api.us-east-1.amazonaws.com';
+  static const _base = 'https://api.sempreiot.com';
 
   /// Look up a subId in Device (type=central) or User (type=user) table.
   /// Uses the current Amplify session JWT for authentication.

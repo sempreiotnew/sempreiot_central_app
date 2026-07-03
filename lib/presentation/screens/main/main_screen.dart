@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/theme_ext.dart';
+import '../../../features/access/application/user_access_provider.dart';
+import '../../../features/access/domain/entities/saved_central.dart';
 import '../../../features/auth/application/auth_provider.dart';
 import '../../../features/central/application/central_auth_provider.dart';
 import '../../../features/central/application/central_status_publisher.dart';
@@ -36,6 +38,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   MainTab _currentTab = MainTab.principal;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _pinOverlayVisible = AppConfig.isCentral;
+  bool _kickedOut = false;
 
   void _handleTabChange(MainTab tab) {
     // In USER mode, "Centrais" tab opens the list screen instead of switching tabs.
@@ -72,6 +75,34 @@ class _MainScreenState extends ConsumerState<MainScreen> {
         });
       }
     });
+
+    // USER mode viewing a central: the moment access stops being ACCEPTED
+    // (BLOCKED arrives over MQTT, or a backend sync flips the status), kick
+    // the user out of the central's screens immediately. The backend has
+    // already detached the IoT policy at that point — this closes the UI.
+    if (!AppConfig.isCentral && widget.centralId != null) {
+      ref.listen(savedCentralsProvider, (_, centrals) {
+        if (_kickedOut || !mounted) return;
+        SavedCentral? entry;
+        for (final c in centrals) {
+          if (c.identityId == widget.centralId) {
+            entry = c;
+            break;
+          }
+        }
+        if (entry != null && entry.status == 'ACCEPTED') return;
+        _kickedOut = true;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Seu acesso a esta central foi revogado.'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        // Pops the central dashboard and anything pushed above it.
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      });
+    }
 
     if (!AppConfig.isCentral) {
       ref.listen(authNotifierProvider, (_, next) {

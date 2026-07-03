@@ -55,7 +55,7 @@ class DeviceInfoScreen extends ConsumerWidget {
                       icon: Icons.label_rounded,
                     ),
                     const InfoRowDivider(),
-                    _HashRow(hash: info['hash'] as String? ?? ''),
+                    _SubIdRow(subId: info['subId'] as String? ?? ''),
                     const InfoRowDivider(),
                     InfoReadRow(
                       label: 'Firmware',
@@ -64,8 +64,8 @@ class DeviceInfoScreen extends ConsumerWidget {
                     ),
                     const InfoRowDivider(),
                     InfoReadRow(
-                      label: 'Hash anterior',
-                      value: info['old_hash'] as String? ?? '',
+                      label: 'Sub ID anterior',
+                      value: info['old_subId'] as String? ?? '',
                       icon: Icons.history_rounded,
                       mono: true,
                     ),
@@ -89,19 +89,19 @@ class DeviceInfoScreen extends ConsumerWidget {
   }
 }
 
-// ── Hash row — inline QR preview + copy / expand actions ─────────────────────
+// ── Sub ID row — inline QR preview + copy / expand actions ───────────────────
 
-class _HashRow extends StatelessWidget {
-  const _HashRow({required this.hash});
-  final String hash;
+class _SubIdRow extends StatelessWidget {
+  const _SubIdRow({required this.subId});
+  final String subId;
 
   static const _qrDark = Color(0xFF111827);
 
-  void _copyHash(BuildContext context) {
-    Clipboard.setData(ClipboardData(text: hash));
+  void _copySubId(BuildContext context) {
+    Clipboard.setData(ClipboardData(text: subId));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Hash copiado.'),
+        content: Text('Sub ID copiado.'),
         behavior: SnackBarBehavior.floating,
         duration: Duration(seconds: 2),
       ),
@@ -111,62 +111,72 @@ class _HashRow extends StatelessWidget {
   void _showQr(BuildContext context) {
     showDialog<void>(
       context: context,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Hash ID',
-                style: TextStyle(
-                  color: _qrDark,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
+      builder: (context) {
+        // Scale the QR to the screen's shortest side and let the dialog
+        // scroll, so landscape (short) screens never overflow.
+        final qrSize = (MediaQuery.sizeOf(context).shortestSide * 0.55)
+            .clamp(140.0, 260.0);
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 340),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Sub ID',
+                    style: TextStyle(
+                      color: _qrDark,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  QrImageView(
+                    data: subId.isEmpty ? 'sem-id' : subId,
+                    version: QrVersions.auto,
+                    size: qrSize,
+                    backgroundColor: Colors.white,
+                    eyeStyle: const QrEyeStyle(
+                      eyeShape: QrEyeShape.square,
+                      color: _qrDark,
+                    ),
+                    dataModuleStyle: const QrDataModuleStyle(
+                      dataModuleShape: QrDataModuleShape.square,
+                      color: _qrDark,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SelectableText(
+                    subId.isEmpty ? '—' : subId,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Color(0xFF6B7280),
+                      fontSize: 11,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Fechar'),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              QrImageView(
-                data: hash.isEmpty ? 'sem-hash' : hash,
-                version: QrVersions.auto,
-                size: 260,
-                backgroundColor: Colors.white,
-                eyeStyle: const QrEyeStyle(
-                  eyeShape: QrEyeShape.square,
-                  color: _qrDark,
-                ),
-                dataModuleStyle: const QrDataModuleStyle(
-                  dataModuleShape: QrDataModuleShape.square,
-                  color: _qrDark,
-                ),
-              ),
-              const SizedBox(height: 12),
-              SelectableText(
-                hash.isEmpty ? '—' : hash,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Color(0xFF6B7280),
-                  fontSize: 11,
-                  fontFamily: 'monospace',
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Fechar'),
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasHash = hash.isNotEmpty;
+    final hasId = subId.isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -174,7 +184,7 @@ class _HashRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           GestureDetector(
-            onTap: hasHash ? () => _showQr(context) : null,
+            onTap: hasId ? () => _showQr(context) : null,
             child: Container(
               width: 76,
               height: 76,
@@ -182,12 +192,12 @@ class _HashRow extends StatelessWidget {
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: hasHash
+                  color: hasId
                       ? AppColors.secondary.withValues(alpha: 0.3)
                       : context.borderColor.withValues(alpha: 0.4),
                   width: 0.8,
                 ),
-                boxShadow: hasHash
+                boxShadow: hasId
                     ? [
                         BoxShadow(
                           color: AppColors.secondary.withValues(alpha: 0.08),
@@ -196,11 +206,11 @@ class _HashRow extends StatelessWidget {
                       ]
                     : null,
               ),
-              child: hasHash
+              child: hasId
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(11),
                       child: QrImageView(
-                        data: hash,
+                        data: subId,
                         version: QrVersions.auto,
                         size: 76,
                         backgroundColor: Colors.white,
@@ -227,7 +237,7 @@ class _HashRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Hash ID',
+                  'Sub ID',
                   style: TextStyle(
                     color: context.textSecondary,
                     fontSize: 11,
@@ -237,11 +247,11 @@ class _HashRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  hasHash
-                      ? '${hash.substring(0, hash.length.clamp(0, 14))}…'
+                  hasId
+                      ? '${subId.substring(0, subId.length.clamp(0, 14))}…'
                       : '—',
                   style: TextStyle(
-                    color: hasHash
+                    color: hasId
                         ? AppColors.secondary
                         : context.textSecondary.withValues(alpha: 0.4),
                     fontSize: 13,
@@ -252,14 +262,14 @@ class _HashRow extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                if (hasHash) ...[
+                if (hasId) ...[
                   const SizedBox(height: 10),
                   Row(
                     children: [
                       _ActionChip(
                         icon: Icons.copy_rounded,
                         label: 'Copiar',
-                        onTap: () => _copyHash(context),
+                        onTap: () => _copySubId(context),
                       ),
                       const SizedBox(width: 8),
                       _ActionChip(

@@ -143,7 +143,7 @@ aws lambda create-function \
   --role arn:aws:iam::644439356850:role/SempreIoTLambdaRole \
   --handler index.handler \
   --zip-file fileb://function.zip \
-  --environment 'Variables={AWS_REGION=us-east-1,ACCESS_REQUEST_TABLE=AccessRequest,CENTRAL_ACCESS_TABLE=CentralAccess,IOT_ENDPOINT=a2jyn1r3dl73o8-ats.iot.us-east-1.amazonaws.com}' \
+  --environment 'Variables={AWS_REGION=us-east-1,ACCESS_REQUEST_TABLE=AccessRequest,CENTRAL_ACCESS_TABLE=CentralAccess,IOT_ENDPOINT=iot.sempreiot.com}' \
   --region us-east-1
 
 # Function URL for access-resolve (Flutter app will call this)
@@ -204,7 +204,7 @@ eyJwYXlsb2FkIjoie1wiY29udGV4dERhdGFcIjp7XCJEZXZpY2VJZFwiOlwiNmE5N2M1MjUtNjc0NC00
 
 
 
-curl -X POST https://czbtuf62d0.execute-api.us-east-1.amazonaws.com/YOUR-STAGE/access/resolve \
+curl -X POST https://api.sempreiot.com/access/resolve \
   -H "Authorization: Bearer eyJraWQiOiJjeU80amtnMmpKRDF3KzIzajZPZmtIQTV0U3RJWllFcU1jZkFpMG5xckVvPSIsImFsZyI6IlJTMjU2In0.eyJzdWIiOiJjNGQ4NTRhOC1jMGExLTcwNGYtMzY1My04NzZmYzg4NzlhM2IiLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsImlzcyI6Imh0dHBzOi8vY29nbml0by1pZHAudXMtZWFzdC0xLmFtYXpvbmF3cy5jb20vdXMtZWFzdC0xX3Q2bVRiVmNxQiIsInBob25lX251bWJlcl92ZXJpZmllZCI6dHJ1ZSwiY29nbml0bzp1c2VybmFtZSI6ImM0ZDg1NGE4LWMwYTEtNzA0Zi0zNjUzLTg3NmZjODg3OWEzYiIsIm9yaWdpbl9qdGkiOiI1MTlhYzRkMC00MjYyLTRhNjAtOWMyMS0xNTQzOTI2ZDJhN2IiLCJhdWQiOiI2a3IwbXQ4YWduOG43ZjExNnIya2wxaWY2OSIsImV2ZW50X2lkIjoiMzdhYzY0YWMtNDk5Yi00NDNhLTkwYjctOWM1YmU3Yzc4NzQ1IiwidG9rZW5fdXNlIjoiaWQiLCJhdXRoX3RpbWUiOjE3ODI4NTM5NTgsIm5hbWUiOiJUYWxsZXMiLCJwaG9uZV9udW1iZXIiOiIrNTUxMTk4ODExMDQxMiIsImV4cCI6MTc4Mjg1NzU1OCwiaWF0IjoxNzgyODUzOTU4LCJqdGkiOiJmYmRlZmIzOS1hYWE1LTRlNmItODQ1Yy1jZWRkYzRjOWZiNWQiLCJlbWFpbCI6IjU1MTE5ODgxMTA0MTJAcGhvbmUuc2VtcHJlaW90In0.hv9rQpV7aCdB7VOPuXJzpqVmMrQ0uwg5Tuceit_RP0DLEKMAO8V17lo5BlsgQjGX1G0P_vmEKdZxcOxQb1rk9DzQ2nIYGYaukokQDVGs7SIVKNw77ryuj9Q2CXMxPglFYXrUllZzJPvfQnogrfE3XUAzdwCdk9TwnJoutmrW_t4tyFxK-HR4FRw7od9gxKOTwqULvTxyTXHBtMISnlZ3HmNdfHd6kv_H8OmvRMhSocXoVrx6pvttHpJVxeJfCBTP9sKmKs5Smr34epbaxPUDYTvG6C2q4tVDOenQsLmRQZSHAPjleKLYEtQmcYczm6Fryy9W1B9rGjJ8gIZRg6Q-OQ" \
   -H "Content-Type: application/json" \
   -d '{
@@ -224,7 +224,7 @@ curl -X POST https://czbtuf62d0.execute-api.us-east-1.amazonaws.com/YOUR-STAGE/a
 
 
 
-curl -X POST https://czbtuf62d0.execute-api.us-east-1.amazonaws.com/access/resolve \
+curl -X POST https://api.sempreiot.com/access/resolve \
   -H "Authorization: Bearer eyJraWQiOiJjeU80amtnMmpKRDF3KzIzajZPZmtIQTV0U3RJWllFcU1jZkFpMG5xckVvPSIsImFsZyI6IlJTMjU2In0.eyJzdWIiOiJjNGQ4NTRhOC1jMGExLTcwNGYtMzY1My04NzZmYzg4NzlhM2IiLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsImlzcyI6Imh0dHBzOi8vY29nbml0by1pZHAudXMtZWFzdC0xLmFtYXpvbmF3cy5jb20vdXMtZWFzdC0xX3Q2bVRiVmNxQiIsInBob25lX251bWJlcl92ZXJpZmllZCI6dHJ1ZSwiY29nbml0bzp1c2VybmFtZSI6ImM0ZDg1NGE4LWMwYTEtNzA0Zi0zNjUzLTg3NmZjODg3OWEzYiIsIm9yaWdpbl9qdGkiOiI1MTlhYzRkMC00MjYyLTRhNjAtOWMyMS0xNTQzOTI2ZDJhN2IiLCJhdWQiOiI2a3IwbXQ4YWduOG43ZjExNnIya2wxaWY2OSIsImV2ZW50X2lkIjoiMzdhYzY0YWMtNDk5Yi00NDNhLTkwYjctOWM1YmU3Yzc4NzQ1IiwidG9rZW5fdXNlIjoiaWQiLCJhdXRoX3RpbWUiOjE3ODI4NTM5NTgsIm5hbWUiOiJUYWxsZXMiLCJwaG9uZV9udW1iZXIiOiIrNTUxMTk4ODExMDQxMiIsImV4cCI6MTc4Mjg1NzU1OCwiaWF0IjoxNzgyODUzOTU4LCJqdGkiOiJmYmRlZmIzOS1hYWE1LTRlNmItODQ1Yy1jZWRkYzRjOWZiNWQiLCJlbWFpbCI6IjU1MTE5ODgxMTA0MTJAcGhvbmUuc2VtcHJlaW90In0.hv9rQpV7aCdB7VOPuXJzpqVmMrQ0uwg5Tuceit_RP0DLEKMAO8V17lo5BlsgQjGX1G0P_vmEKdZxcOxQb1rk9DzQ2nIYGYaukokQDVGs7SIVKNw77ryuj9Q2CXMxPglFYXrUllZzJPvfQnogrfE3XUAzdwCdk9TwnJoutmrW_t4tyFxK-HR4FRw7od9gxKOTwqULvTxyTXHBtMISnlZ3HmNdfHd6kv_H8OmvRMhSocXoVrx6pvttHpJVxeJfCBTP9sKmKs5Smr34epbaxPUDYTvG6C2q4tVDOenQsLmRQZSHAPjleKLYEtQmcYczm6Fryy9W1B9rGjJ8gIZRg6Q-OQ" \
   -H "Content-Type: application/json" \
   -d '{
@@ -274,3 +274,9 @@ us-east-1:960b9435-b271-c27e-0781-73fe64baa097/access
 flutter run -d 98cc396d \
   --dart-define=APP_MODE=central \
   --dart-define='FACTORY={"info":{"name":"Central Nome","firmware_version":"1.0.0","hash":"a1b2c3","old_hash":"","created_at":"2026-06-25","updated_at":"2026-06-25"},"credentials":{"pin":"428412","unlock_pin":"731942","root":"admin","password":"Teste@123","level_pins":{"LEVEL_1":"111111","LEVEL_2":"222222","LEVEL_3":"333333","LEVEL_4":"444444"}},"iot":{"iot_client_id":"central-003@sempreiot.com","iot_password":"$y3XYZv8H)Dw@O+(7+Sy"}}'
+
+
+
+  flutter run -d 98cc396d \
+  --dart-define=APP_MODE=central \
+  --dart-define='FACTORY={"info":{"name":"Central Nome","firmware_version":"1.0.0","subId":"84b824d8-6041-701c-70a1-ba40bb4f0ab4","old_subId":"","created_at":"2026-06-25","updated_at":"2026-06-25"},"credentials":{"pin":"428412","unlock_pin":"123456","root":"admin","password":"Teste@123","level_pins":{"LEVEL_1":"111111","LEVEL_2":"222222","LEVEL_3":"333333","LEVEL_4":"444444"}},"iot":{"iot_client_id":"central-003@sempreiot.com","iot_password":"$y3XYZv8H)Dw@O+(7+Sy"}}'
