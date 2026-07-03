@@ -93,6 +93,35 @@ CommTileData _usbTile(BuildContext context, String? state) {
   };
 }
 
+CommTileData _meshTile(BuildContext context, String? state) {
+  return switch (state) {
+    'connected' => const CommTileData(
+        icon: Icons.hub_rounded,
+        label: 'REDE INTERNA',
+        statusText: 'Conectado',
+        color: AppColors.success,
+      ),
+    'connecting' => const CommTileData(
+        icon: Icons.hub_rounded,
+        label: 'REDE INTERNA',
+        statusText: 'Conectando…',
+        color: AppColors.warning,
+      ),
+    'disconnected' => CommTileData(
+        icon: Icons.hub_rounded,
+        label: 'REDE INTERNA',
+        statusText: 'Desconectado',
+        color: context.textSecondary.withValues(alpha: 0.6),
+      ),
+    _ => CommTileData(
+        icon: Icons.hub_rounded,
+        label: 'REDE INTERNA',
+        statusText: 'Verificando…',
+        color: context.textSecondary.withValues(alpha: 0.6),
+      ),
+  };
+}
+
 CommTileData _cloudTile(BuildContext context, String? state) {
   return switch (state) {
     'connected' => const CommTileData(
@@ -142,6 +171,9 @@ class CentralCommGadget extends ConsumerWidget {
     return CommStatusGadget(tiles: [
       _wifiTile(context, network.name),
       _usbTile(context, serial.name),
+      // Placeholder until the mesh network exists — wire to a real provider
+      // when devices come online.
+      _meshTile(context, 'disconnected'),
       _cloudTile(context, cloudState),
     ]);
   }
@@ -163,16 +195,27 @@ class UserCentralCommGadget extends ConsumerWidget {
     // Offline central: its cloud link is down, its network is unreachable
     // and any retained wifi/usb values are stale — mirror what the central
     // itself would show in that situation.
-    final (String? wifi, String? usb, String? cloud) =
+    final (String? wifi, String? usb, String? mesh, String? cloud) =
         switch (status.presence) {
-      PresenceStatus.online => (status.wifi, status.usb, 'connected'),
-      PresenceStatus.offline => ('offline', 'disconnected', 'disconnected'),
-      PresenceStatus.unknown => (null, null, null),
+      PresenceStatus.online => (
+          status.wifi,
+          status.usb,
+          status.mesh ?? 'disconnected',
+          'connected',
+        ),
+      PresenceStatus.offline => (
+          'offline',
+          'disconnected',
+          'disconnected',
+          'disconnected',
+        ),
+      PresenceStatus.unknown => (null, null, null, null),
     };
 
     return CommStatusGadget(tiles: [
       _wifiTile(context, wifi),
       _usbTile(context, usb),
+      _meshTile(context, mesh),
       _cloudTile(context, cloud),
     ]);
   }
@@ -189,7 +232,7 @@ class CommStatusGadget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
         color: context.surfaceColor,
         borderRadius: BorderRadius.circular(14),
@@ -203,11 +246,11 @@ class CommStatusGadget extends StatelessWidget {
           // Icon scales with the slot width but stays in a comfortable
           // range on tablets/web, where the row is also capped and centered.
           final slotWidth = constraints.maxWidth / tiles.length;
-          final iconSize = (slotWidth * 0.4).clamp(52.0, 64.0);
+          final iconSize = (slotWidth * 0.45).clamp(44.0, 56.0);
 
           return Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
+              constraints: const BoxConstraints(maxWidth: 560),
               child: Row(
                 children: [
                   for (final tile in tiles)
@@ -249,25 +292,37 @@ class _CommTile extends StatelessWidget {
             ),
             child: Icon(data.icon, color: data.color, size: size * 0.44),
           ),
-          const SizedBox(height: 8),
-          Text(
-            data.label,
-            style: TextStyle(
-              color: context.textPrimary,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.6,
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                data.label,
+                maxLines: 1,
+                style: TextStyle(
+                  color: context.textPrimary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.6,
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 2),
-          Text(
-            data.statusText,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: data.color,
-              fontSize: 10,
-              fontWeight: FontWeight.w500,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                data.statusText,
+                maxLines: 1,
+                style: TextStyle(
+                  color: data.color,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ),
           ),
         ],

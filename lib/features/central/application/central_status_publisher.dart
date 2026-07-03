@@ -54,6 +54,9 @@ final centralStatusPublisherProvider = Provider<void>((ref) {
       'status': 'online',
       'wifi': snap.wifi,
       'usb': snap.usb,
+      // Placeholder until the mesh network exists — wire to a real provider
+      // (and add it to the snapshot) when devices come online.
+      'mesh': 'disconnected',
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     });
     try {

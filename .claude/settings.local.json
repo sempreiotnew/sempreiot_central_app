@@ -37,7 +37,12 @@
       "Bash(mv function.zip.new function.zip)",
       "Bash(python3 -)",
       "Bash(node --check /Users/tallesrocha/Desktop/sempreiot-vibe-new/lambda/access-resolve/index.mjs)",
-      "Bash(flutter test *)"
+      "Bash(flutter test *)",
+      "Bash(aws sns get-sms-attributes *)",
+      "Bash(aws service-quotas *)",
+      "Bash(aws sns *)",
+      "Bash(aws sesv2 *)",
+      "Bash(aws route53 *)"
     ]
   }
 }

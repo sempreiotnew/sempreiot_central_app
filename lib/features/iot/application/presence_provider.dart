@@ -25,18 +25,24 @@ enum PresenceStatus { unknown, online, offline }
 ///
 /// Payload schema (all keys optional except `status`):
 /// `{"status":"online","wifi":"online|limited|offline",
-///   "usb":"connected|connecting|error|disconnected","updated_at":ISO8601}`
+///   "usb":"connected|connecting|error|disconnected",
+///   "mesh":"connected|connecting|disconnected","updated_at":ISO8601}`
 class CentralLiveStatus {
   const CentralLiveStatus({
     this.presence = PresenceStatus.unknown,
     this.wifi,
     this.usb,
+    this.mesh,
     this.updatedAt,
   });
 
   final PresenceStatus presence;
   final String? wifi;
   final String? usb;
+
+  /// Mesh (internal device network) status — always "disconnected" until
+  /// real mesh devices exist.
+  final String? mesh;
   final DateTime? updatedAt;
 }
 
@@ -54,6 +60,7 @@ final centralLiveStatusProvider =
           : PresenceStatus.offline,
       wifi: map['wifi'] as String?,
       usb: map['usb'] as String?,
+      mesh: map['mesh'] as String?,
       updatedAt: DateTime.tryParse(map['updated_at'] as String? ?? ''),
     );
   } catch (_) {
