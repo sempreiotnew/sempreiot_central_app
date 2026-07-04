@@ -6,6 +6,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/theme_ext.dart';
 import '../../../../core/theme/theme_provider.dart';
 import '../../../../features/access/application/central_access_provider.dart';
+import '../../../../features/access/application/user_access_provider.dart';
+import '../../../../features/access/domain/entities/saved_central.dart';
 import '../../../../features/auth/application/auth_provider.dart';
 import '../../../../features/central/application/central_auth_provider.dart';
 import '../../../../features/central/application/device_info_provider.dart';
@@ -19,26 +21,53 @@ class MainDrawer extends ConsumerWidget {
     super.key,
     required this.currentTab,
     required this.onTabSelected,
+    this.centralId,
   });
 
   final MainTab currentTab;
   final ValueChanged<MainTab> onTabSelected;
 
+  /// USER mode only: when non-null, the drawer is the restricted menu shown
+  /// while viewing that central — reduced navigation, Armazenamento only,
+  /// no admin items and no footer.
+  final String? centralId;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final userId = AppConfig.isCentral
-        ? 'Modo Central'
-        : (ref.watch(authNotifierProvider).valueOrNull?.userId ?? '—');
-    final initials = AppConfig.isCentral ? 'CT' : _initials(userId);
+    final restricted = centralId != null;
     final width = (MediaQuery.of(context).size.width * 0.82).clamp(0.0, 320.0);
+
+    // Restricted mode: header shows the viewed central — the user's local
+    // nickname on top, the central's real subId below (mirrors the app bar).
+    SavedCentral? saved;
+    if (restricted) {
+      final matches = ref
+          .watch(savedCentralsProvider)
+          .where((c) => c.identityId == centralId)
+          .toList();
+      saved = matches.isNotEmpty ? matches.first : null;
+    }
+
     // Central mode: header shows the central's own name from the "info"
     // metadata (set via FACTORY), not a fixed label.
     final centralName = AppConfig.isCentral
         ? ((ref.watch(deviceInfoProvider).valueOrNull?['name'] as String?) ?? '')
         : '';
-    final headerTitle = AppConfig.isCentral
-        ? (centralName.isNotEmpty ? centralName : 'Central SempreIoT')
-        : 'Minha conta';
+    final headerTitle = restricted
+        ? ((saved?.name.isNotEmpty ?? false) ? saved!.name : 'Central')
+        : AppConfig.isCentral
+            ? (centralName.isNotEmpty ? centralName : 'Central SempreIoT')
+            : 'Minha conta';
+    final userId = restricted
+        ? ((saved?.subId.isNotEmpty ?? false) ? saved!.subId : centralId!)
+        : AppConfig.isCentral
+            ? 'Modo Central'
+            : (ref.watch(authNotifierProvider).valueOrNull?.userId ?? '—');
+    final initials = restricted
+        ? _initials(headerTitle)
+        : AppConfig.isCentral
+            ? 'CT'
+            : _initials(userId);
 
     return SizedBox(
       width: width,
@@ -54,9 +83,10 @@ class MainDrawer extends ConsumerWidget {
                 children: [
                   const _SectionLabel('NAVEGAÇÃO'),
                   const SizedBox(height: 4),
-                  ...MainTab.tabs
-                      .where((t) =>
-                          t != MainTab.logs && t != MainTab.social)
+                  ...(restricted
+                          ? MainTab.centralDetailTabs
+                          : MainTab.tabs.where((t) =>
+                              t != MainTab.logs && t != MainTab.social))
                       .map(
                         (tab) => _NavItem(
                           tab: tab,
@@ -70,7 +100,7 @@ class MainDrawer extends ConsumerWidget {
                   const SizedBox(height: 16),
                   const _SectionLabel('SISTEMA'),
                   const SizedBox(height: 4),
-                  if (AppConfig.isCentral) ...[
+                  if (restricted)
                     _DrawerItem(
                       icon: Icons.storage_rounded,
                       label: 'Armazenamento',
@@ -79,7 +109,7 @@ class MainDrawer extends ConsumerWidget {
                         Navigator.of(context).push(
                           PageRouteBuilder(
                             pageBuilder: (_, __, ___) =>
-                                const StorageScreen(),
+                                StorageScreen(centralId: centralId),
                             transitionsBuilder: (_, anim, __, child) =>
                                 FadeTransition(opacity: anim, child: child),
                             transitionDuration:
@@ -87,37 +117,57 @@ class MainDrawer extends ConsumerWidget {
                           ),
                         );
                       },
-                    ),
-                    _DrawerItem(
-                      icon: Icons.info_outline_rounded,
-                      label: 'Informações',
-                      onTap: () {
+                    )
+                  else ...[
+                    if (AppConfig.isCentral) ...[
+                      _DrawerItem(
+                        icon: Icons.storage_rounded,
+                        label: 'Armazenamento',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
+                            PageRouteBuilder(
+                              pageBuilder: (_, __, ___) =>
+                                  const StorageScreen(),
+                              transitionsBuilder: (_, anim, __, child) =>
+                                  FadeTransition(opacity: anim, child: child),
+                              transitionDuration:
+                                  const Duration(milliseconds: 300),
+                            ),
+                          );
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: Icons.info_outline_rounded,
+                        label: 'Informações',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const DeviceInfoScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _AcessosDrawerItem(onTap: () {
                         Navigator.pop(context);
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => const DeviceInfoScreen(),
+                            builder: (_) => const DeviceAccessScreen(),
                           ),
                         );
-                      },
+                      }),
+                    ],
+                    const _ThemeToggleItem(),
+                    const _DrawerItem(
+                      icon: Icons.info_outline_rounded,
+                      label: 'Sobre',
                     ),
-                    _AcessosDrawerItem(onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const DeviceAccessScreen(),
-                        ),
-                      );
-                    }),
                   ],
-                  const _ThemeToggleItem(),
-                  const _DrawerItem(
-                    icon: Icons.info_outline_rounded,
-                    label: 'Sobre',
-                  ),
                 ],
               ),
             ),
-            const _DrawerFooter(),
+            if (!restricted) const _DrawerFooter(),
           ],
         ),
       ),

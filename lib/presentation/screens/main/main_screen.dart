@@ -9,6 +9,7 @@ import '../../../features/access/domain/entities/saved_central.dart';
 import '../../../features/auth/application/auth_provider.dart';
 import '../../../features/central/application/central_auth_provider.dart';
 import '../../../features/central/application/central_status_publisher.dart';
+import '../../../features/central/application/central_storage_publisher.dart';
 import '../../../features/iot/application/presence_provider.dart';
 import '../../../features/centrais/presentation/screens/centrais_list_screen.dart';
 import '../../../core/connectivity/network_status_provider.dart';
@@ -56,10 +57,11 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     final isLocked = AppConfig.isCentral &&
         ref.watch(centralAuthProvider) is! CentralAuthenticated;
 
-    // Keeps the retained presence payload fresh with wifi/usb state so
-    // users viewing this central see its real status. No-op in USER mode.
+    // Keeps the retained presence and storage payloads fresh so users
+    // viewing this central see its real status. No-op in USER mode.
     if (AppConfig.isCentral) {
       ref.watch(centralStatusPublisherProvider);
+      ref.watch(centralStoragePublisherProvider);
     }
 
     ref.listen(centralAuthProvider, (prev, next) {
@@ -136,11 +138,12 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                 ? () => Navigator.of(context).pop()
                 : null,
           ),
-          drawer: (isLocked || isCentralDetail)
+          drawer: isLocked
               ? null
               : MainDrawer(
                   currentTab: _currentTab,
                   onTabSelected: _handleTabChange,
+                  centralId: widget.centralId,
                 ),
           body: _TabBody(currentTab: _currentTab, centralId: widget.centralId),
           bottomNavigationBar: AnimatedSwitcher(

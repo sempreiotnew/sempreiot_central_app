@@ -14,6 +14,10 @@ enum MainTab {
       ? [principal, central, devices, logs, social]
       : [principal, centrais, social];
 
+  /// USER mode drilling into a specific central: the reduced set of tabs
+  /// a viewer can navigate inside that central.
+  static List<MainTab> get centralDetailTabs => [principal, devices, central];
+
   String get label => switch (this) {
         MainTab.principal => 'Principal',
         MainTab.central => 'Central',

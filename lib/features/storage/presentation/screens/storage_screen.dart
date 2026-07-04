@@ -5,11 +5,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/theme_ext.dart';
+import '../../../iot/application/presence_provider.dart';
+import '../../application/remote_storage_provider.dart';
 import '../../application/storage_provider.dart';
 import '../../domain/entities/storage_volume.dart';
 
 class StorageScreen extends ConsumerWidget {
-  const StorageScreen({super.key});
+  const StorageScreen({super.key, this.centralId});
+
+  /// USER mode only: when non-null, shows that central's storage from its
+  /// retained MQTT snapshot instead of this device's local volume.
+  final String? centralId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return centralId == null
+        ? const _LocalStorageView()
+        : _RemoteStorageView(centralId: centralId!);
+  }
+}
+
+/// Local volume via MethodChannel — one-shot fetch + 30s poll, manual refresh.
+class _LocalStorageView extends ConsumerWidget {
+  const _LocalStorageView();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -37,13 +55,43 @@ class StorageScreen extends ConsumerWidget {
   }
 }
 
+/// A central's storage from its retained `/storage` message — push-based,
+/// so there is no refresh button; freshness comes from the payload itself.
+class _RemoteStorageView extends ConsumerWidget {
+  const _RemoteStorageView({required this.centralId});
+
+  final String centralId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final remote = ref.watch(remoteStorageProvider(centralId));
+    final offline =
+        ref.watch(presenceStatusProvider(centralId)) == PresenceStatus.offline;
+
+    return Scaffold(
+      backgroundColor: context.bgColor,
+      appBar: const _StorageAppBar(isRefreshing: false),
+      body: remote == null
+          ? _WaitingBody(offline: offline)
+          : _StorageBody(
+              volume: remote.volume,
+              sectionTitle: 'ARMAZENAMENTO DA CENTRAL',
+              updatedAt: remote.updatedAt,
+              offline: offline,
+            ),
+    );
+  }
+}
+
 // ── AppBar ────────────────────────────────────────────────────────────────────
 
 class _StorageAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const _StorageAppBar({required this.isRefreshing, required this.onRefresh});
+  const _StorageAppBar({required this.isRefreshing, this.onRefresh});
 
   final bool isRefreshing;
-  final VoidCallback onRefresh;
+
+  /// Null hides the refresh action (remote mode — data is pushed).
+  final VoidCallback? onRefresh;
 
   @override
   Size get preferredSize => const Size.fromHeight(56);
@@ -102,15 +150,17 @@ class _StorageAppBar extends StatelessWidget implements PreferredSizeWidget {
                         strokeWidth: 2,
                       ),
                     )
-                  : IconButton(
-                      icon: Icon(
-                        Icons.refresh_rounded,
-                        color: context.textSecondary,
-                        size: 20,
-                      ),
-                      onPressed: onRefresh,
-                      tooltip: 'Atualizar',
-                    ),
+                  : onRefresh == null
+                      ? null
+                      : IconButton(
+                          icon: Icon(
+                            Icons.refresh_rounded,
+                            color: context.textSecondary,
+                            size: 20,
+                          ),
+                          onPressed: onRefresh,
+                          tooltip: 'Atualizar',
+                        ),
             ),
           ),
           const SizedBox(width: 8),
@@ -183,9 +233,22 @@ class _ErrorBody extends StatelessWidget {
 // ── Main body ─────────────────────────────────────────────────────────────────
 
 class _StorageBody extends StatelessWidget {
-  const _StorageBody({required this.volume});
+  const _StorageBody({
+    required this.volume,
+    this.sectionTitle = 'ARMAZENAMENTO INTERNO',
+    this.updatedAt,
+    this.offline = false,
+  });
 
   final StorageVolume volume;
+  final String sectionTitle;
+
+  /// Remote mode: when the central last published this snapshot.
+  final DateTime? updatedAt;
+
+  /// Remote mode: central currently offline — data shown is the last
+  /// retained snapshot.
+  final bool offline;
 
   @override
   Widget build(BuildContext context) {
@@ -194,7 +257,7 @@ class _StorageBody extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _SectionLabel('ARMAZENAMENTO INTERNO'),
+          _SectionLabel(sectionTitle),
           const SizedBox(height: 4),
           Text(
             volume.label,
@@ -203,6 +266,30 @@ class _StorageBody extends StatelessWidget {
               fontSize: 13,
             ),
           ),
+          if (updatedAt != null) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(
+                  Icons.schedule_rounded,
+                  size: 12,
+                  color: context.textSecondary.withValues(alpha: 0.7),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  _formatUpdatedAt(updatedAt!),
+                  style: TextStyle(
+                    color: context.textSecondary.withValues(alpha: 0.7),
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (offline) ...[
+            const SizedBox(height: 16),
+            const _OfflineBanner(),
+          ],
           const SizedBox(height: 28),
           _GaugeCard(volume: volume),
           const SizedBox(height: 16),
@@ -212,6 +299,119 @@ class _StorageBody extends StatelessWidget {
           const SizedBox(height: 16),
           _StatusCard(fraction: volume.usedFraction),
         ],
+      ),
+    );
+  }
+}
+
+String _formatUpdatedAt(DateTime dt) {
+  final local = dt.toLocal();
+  final now = DateTime.now();
+  final hm = '${local.hour.toString().padLeft(2, '0')}:'
+      '${local.minute.toString().padLeft(2, '0')}';
+  final sameDay = local.year == now.year &&
+      local.month == now.month &&
+      local.day == now.day;
+  if (sameDay) return 'Atualizado às $hm';
+  final dm = '${local.day.toString().padLeft(2, '0')}/'
+      '${local.month.toString().padLeft(2, '0')}';
+  return 'Atualizado em $dm às $hm';
+}
+
+// ── Remote states ─────────────────────────────────────────────────────────────
+
+class _OfflineBanner extends StatelessWidget {
+  const _OfflineBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.warning.withValues(alpha: 0.25),
+          width: 0.8,
+        ),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.cloud_off_rounded, color: AppColors.warning, size: 18),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Central offline — exibindo os últimos dados recebidos.',
+              style: TextStyle(
+                color: AppColors.warning,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown while no retained storage snapshot has arrived for the central.
+class _WaitingBody extends StatelessWidget {
+  const _WaitingBody({required this.offline});
+
+  final bool offline;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, title, subtitle) = offline
+        ? (
+            Icons.cloud_off_rounded,
+            'Central offline',
+            'Os dados de armazenamento aparecerão quando a central '
+                'estiver online.',
+          )
+        : (
+            Icons.storage_rounded,
+            'Aguardando dados da central…',
+            'As informações de armazenamento aparecerão assim que a '
+                'central enviá-las.',
+          );
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: AppColors.secondary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Icon(icon, color: AppColors.secondary, size: 28),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: context.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: context.textSecondary, fontSize: 13),
+            ),
+          ],
+        ),
       ),
     );
   }

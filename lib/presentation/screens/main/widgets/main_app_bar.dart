@@ -111,6 +111,14 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
                       ),
               ),
             ],
+            // Central-detail view: back arrow owns the left slot, so the
+            // restricted drawer's menu button lives on the right instead.
+            if (centralId != null)
+              _BarIconButton(
+                icon: Icons.menu_rounded,
+                onTap: onMenuTap ?? () {},
+                tooltip: 'Menu',
+              ),
             const SizedBox(width: 10),
             AnimatedOpacity(
               opacity: isLocked ? 0.0 : 1.0,
