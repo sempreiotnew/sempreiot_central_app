@@ -5,7 +5,8 @@ import '../../../../core/connectivity/network_status_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/theme_ext.dart';
 import '../../../../features/central/application/central_iot_provider.dart';
-import '../../../../features/central/application/serial_provider.dart';
+import '../../../../features/central/application/serial_link_provider.dart';
+import '../../../../features/central/application/supervision_provider.dart';
 import '../../../../features/iot/application/presence_provider.dart';
 
 /// One communication channel shown in the gadget: a rounded (Apple-style)
@@ -159,7 +160,10 @@ class CentralCommGadget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final network = ref.watch(networkStatusProvider);
-    final serial = ref.watch(serialProvider);
+    // Protocol-driven: "Conectado" means valid SAFR frames are flowing, not
+    // merely that a USB port is open (docs/protocol-safr-v2.md §8).
+    final link = ref.watch(serialLinkProvider);
+    final mesh = ref.watch(meshLinkStateProvider);
     final iot = ref.watch(centralIotConnectionProvider);
 
     final cloudState = iot.isLoading
@@ -170,10 +174,8 @@ class CentralCommGadget extends ConsumerWidget {
 
     return CommStatusGadget(tiles: [
       _wifiTile(context, network.name),
-      _usbTile(context, serial.name),
-      // Placeholder until the mesh network exists — wire to a real provider
-      // when devices come online.
-      _meshTile(context, 'disconnected'),
+      _usbTile(context, link.name),
+      _meshTile(context, mesh),
       _cloudTile(context, cloudState),
     ]);
   }

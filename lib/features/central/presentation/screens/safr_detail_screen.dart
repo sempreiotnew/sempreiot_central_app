@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/theme_ext.dart';
+import '../../domain/safr/safr_v2_frame.dart' as v2;
+import '../../domain/safr/safr_v2_payloads.dart' as v2p;
 import '../../domain/safr_frame.dart';
 
 class SafrDetailScreen extends StatefulWidget {
@@ -20,6 +22,14 @@ class _SafrDetailScreenState extends State<SafrDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final raw = widget.packet.rawBytes;
+    if (raw.length > 1 && (raw[1] == v2.safrVer2 || raw[1] == v2.safrVer3)) {
+      return _WireDetailScaffold(
+        packet: widget.packet,
+        showHex: _showHex,
+        onToggleHex: () => setState(() => _showHex = !_showHex),
+      );
+    }
     final frame = parseSafrFrame(widget.packet.rawBytes);
     final (evtColor, evtLabel) = safrEventStyle(frame.payload?.event);
     final isDecryptFail = frame.decryptionAttempted && !frame.decryptionSuccess;
@@ -842,4 +852,722 @@ String _hexDump(Uint8List bytes) {
         '${i.toRadixString(16).padLeft(6, '0')}  ${hex.padRight(47)}  $ascii');
   }
   return buf.toString().trimRight();
+}
+
+// ── SAFR v2/v3 detail — every field decoded AND explained ────────────────────
+
+/// One decoded fact: label + value + optional plain-language explanation of
+/// what the field is for (shown as secondary text under the value).
+typedef _Fact = (String, String, String?);
+
+class _WireDetailScaffold extends StatelessWidget {
+  const _WireDetailScaffold({
+    required this.packet,
+    required this.showHex,
+    required this.onToggleHex,
+  });
+
+  final SerialPacket packet;
+  final bool showHex;
+  final VoidCallback onToggleHex;
+
+  @override
+  Widget build(BuildContext context) {
+    final frame = v2.parseSafrWireFrame(packet.rawBytes);
+    final (color, label) = _badge(frame);
+
+    return Scaffold(
+      backgroundColor: context.bgColor,
+      appBar: AppBar(
+        backgroundColor: context.bgColor,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+          color: context.textSecondary,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+                border:
+                    Border.all(color: color.withValues(alpha: 0.4), width: 0.7),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: color,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'v${frame.ver} · MSG #${frame.msgId}',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+                color: context.textSecondary,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(
+              showHex ? Icons.analytics_outlined : Icons.data_array_rounded,
+              size: 18,
+            ),
+            color: context.textSecondary,
+            tooltip: showHex ? 'Mostrar decodificado' : 'Mostrar hex bruto',
+            onPressed: onToggleHex,
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
+      body: showHex
+          ? _HexBody(bytes: packet.rawBytes)
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                if (frame.error != null) _WireErrorCard(error: frame.error!),
+                _ValidationCard(frame: frame),
+                const SizedBox(height: 12),
+                _FactsCard(title: 'CABEÇALHO', facts: _headerFacts(frame)),
+                const SizedBox(height: 12),
+                if (frame.error == null)
+                  _FactsCard(
+                    title: 'PAYLOAD — ${frame.msgType.name.toUpperCase()}',
+                    facts: _payloadFacts(frame),
+                  ),
+              ],
+            ),
+    );
+  }
+
+  (Color, String) _badge(v2.SafrWireFrame frame) {
+    if (frame.error != null) {
+      return switch (frame.error!) {
+        v2.SafrWireError.authFailed => (AppColors.error, 'AUTH ERR'),
+        v2.SafrWireError.crcFailed => (AppColors.error, 'CRC ERR'),
+        v2.SafrWireError.foreignSystem => (AppColors.error, 'OUTRO SISTEMA'),
+        _ => (AppColors.error, 'PARSE ERR'),
+      };
+    }
+    return switch (frame.payload) {
+      v2p.SafrEventPayload p => switch (p.eventType) {
+          v2p.SafrEventType.alarm => (AppColors.error, 'ALARM'),
+          v2p.SafrEventType.alert => (AppColors.warning, 'ALERT'),
+          v2p.SafrEventType.trouble => (AppColors.trouble, 'TROUBLE'),
+          _ => (AppColors.success, 'OK'),
+        },
+      v2p.SafrHeartbeatPayload _ => (AppColors.secondary, 'HEARTBEAT'),
+      v2p.SafrTopologyPayload _ => (AppColors.secondary, 'TOPOLOGY'),
+      v2p.SafrAckPayload _ => (AppColors.success, 'ACK'),
+      v2p.SafrCommandPayload _ => (AppColors.secondary, 'COMMAND'),
+      v2p.SafrTimeSyncPayload _ => (AppColors.secondary, 'TIME SYNC'),
+      v2p.SafrEventLogReqPayload _ => (AppColors.secondary, 'LOG REQ'),
+      v2p.SafrEventLogDataPayload _ => (AppColors.secondary, 'LOG DATA'),
+      _ => (AppColors.warning, 'DESCONHECIDO'),
+    };
+  }
+
+  List<_Fact> _headerFacts(v2.SafrWireFrame f) => [
+        (
+          'Versão',
+          'SAFR v${f.ver}',
+          f.ver == v2.safrVer3
+              ? 'Protocolo atual (docs/protocol-safr-v3.md).'
+              : 'Protocolo anterior — somente leitura de pacotes antigos.',
+        ),
+        (
+          'Tipo',
+          '${f.msgType.name} (0x${f.msgTypeRaw.toRadixString(16).padLeft(2, '0')})',
+          _msgTypeExplain(f.msgType),
+        ),
+        (
+          'MSG_ID',
+          '#${f.msgId}',
+          'Sequência por remetente. O ACK cita este número; retransmissões '
+              'rápidas o repetem para o receptor deduplicar.',
+        ),
+        if (f.systemId != null)
+          (
+            'SYSTEM_ID',
+            '0x${f.systemId!.toRadixString(16).toUpperCase().padLeft(4, '0')}',
+            'Identidade da instalação. Sistemas vizinhos são ignorados por '
+                'projeto (EN 54-25).',
+          ),
+        (
+          'De (origem)',
+          _endpointLabel(f.srcMac),
+          'Identidade única do dispositivo — todo sinal identifica o '
+              'equipamento específico (NFPA 72).',
+        ),
+        (
+          'Para (destino)',
+          _endpointLabel(f.dstMac, broadcast: f.isDstBroadcast),
+          null,
+        ),
+        (
+          'TTL / Hops',
+          '${f.ttl} / ${f.hops}',
+          'TTL: saltos restantes (mata loops de roteamento). Hops: saltos já '
+              'percorridos = profundidade do dispositivo na mesh.',
+        ),
+        (
+          'Flags',
+          [
+            if (f.isEncrypted) 'ENC',
+            if (f.ackRequired) 'ACK_REQ',
+            if (f.isRetx) 'RETX',
+            if (!f.isEncrypted && !f.ackRequired && !f.isRetx) '—',
+          ].join(' · '),
+          [
+            if (f.isEncrypted) 'ENC: payload criptografado (AES-CCM).',
+            if (f.ackRequired)
+              'ACK_REQ: exige confirmação — obrigatório em ALARM/TROUBLE.',
+            if (f.isRetx)
+              'RETX: reanúncio periódico (≤60 s) do mesmo evento — NFPA 72.',
+            if (!f.isEncrypted)
+              'SEM criptografia: rejeitado em produção (spec §4.1).',
+          ].join(' '),
+        ),
+        (
+          'Boot / Msg ctr',
+          '${f.bootCtr} / ${f.msgCtr}',
+          'Contadores que formam o nonce criptográfico e detectam replay: '
+              'um quadro repetido/atrasado nunca altera o estado.',
+        ),
+        ('Tamanho', '${f.lenField} bytes', null),
+      ];
+
+  String? _msgTypeExplain(v2.SafrMsgType t) => switch (t) {
+        v2.SafrMsgType.event =>
+          'Mudança de estado no dispositivo (alarme, falha, normalização).',
+        v2.SafrMsgType.heartbeat =>
+          'Prova de vida para supervisão — silêncio prolongado gera TROUBLE '
+              '"dispositivo ausente" em ≤200 s (NFPA 72).',
+        v2.SafrMsgType.topology => 'Mapa da rede mesh (pai/filhos/sinal).',
+        v2.SafrMsgType.ack => 'Confirmação de recebimento de quadro crítico.',
+        v2.SafrMsgType.command =>
+          'Comando da central (silenciar, teste, rearme, verificação de '
+              'enlace).',
+        v2.SafrMsgType.timeSync =>
+          'Distribui o relógio real para os dispositivos.',
+        v2.SafrMsgType.eventLogReq =>
+          'Pedido de reenvio do diário de eventos do root (EN 54-25: nenhum '
+              'alarme se perde).',
+        v2.SafrMsgType.eventLogData =>
+          'Evento reenviado do diário do root — ocorreu enquanto a central '
+              'estava desconectada.',
+        _ => null,
+      };
+
+  /// Humanized endpoint: the central's addresses read as words, devices keep
+  /// their MAC.
+  String _endpointLabel(String mac, {bool broadcast = false}) {
+    if (broadcast) return 'Central (broadcast)';
+    if (mac == v2.safrCentralMac) return 'Central (esta unidade)';
+    return mac;
+  }
+
+  List<_Fact> _eventFacts(v2p.SafrEventPayload p) => [
+        (
+          'Evento',
+          p.eventType.name.toUpperCase(),
+          switch (p.eventType) {
+            v2p.SafrEventType.alarm =>
+              'ALARME: fica retido na central até rearme manual do operador '
+                  '(UL 864/NFPA 72) e é reanunciado a cada ≤60 s.',
+            v2p.SafrEventType.trouble =>
+              'Falha de equipamento/comunicação — limpa com a normalização '
+                  '(RESTORE) correspondente.',
+            v2p.SafrEventType.alert =>
+              'Supervisão / pré-alarme — informativo, não retém.',
+            _ => 'Normalização ou status periódico.',
+          },
+        ),
+        ('Código', p.eventCode.name, _eventCodeExplain(p.eventCode)),
+        if (p.devSeq != null)
+          (
+            'DEV_SEQ',
+            '#${p.devSeq}',
+            'Identidade do evento: reanúncios e reenvios do diário repetem '
+                'este número e são deduplicados — o mesmo alarme nunca vira '
+                'dois.',
+          ),
+        (
+          'Horário (disp.)',
+          safrFmtTs(p.timestamp),
+          'Momento da DETECÇÃO no dispositivo (relógio sincronizado). Pode '
+              'diferir do horário de recepção em eventos reenviados do '
+              'diário.',
+        ),
+        if (p.batteryPct != null)
+          (
+            'Bateria',
+            '${p.batteryPct}%',
+            'O aviso normativo é o TROUBLE BATT_LOW: dispara com ≥7 dias de '
+                'operação restante (NFPA 72).',
+          ),
+        if (p.smokeRaw != null)
+          (
+            'Fumaça',
+            '${p.smokeRaw} ADU',
+            'Leitura bruta do sensor (ADP188BI) — valor cru para tendência '
+                'de pré-alarme e auditoria de limiares.',
+          ),
+        if (p.tempTenths != null)
+          ('Temperatura', '${(p.tempTenths! / 10).toStringAsFixed(1)} °C',
+              null),
+        if (p.humidityPct != null) ('Umidade', '${p.humidityPct}%', null),
+        (
+          'Energia',
+          [
+            if (p.acOk) 'AC',
+            if (p.charging) 'carregando',
+            if (p.onBattery) 'na bateria',
+            if (p.tamper) 'TAMPER',
+            if (!p.acOk && !p.charging && !p.onBattery && !p.tamper) '—',
+          ].join(' · '),
+          'Estado dos GPIOs de energia no momento do evento.',
+        ),
+        if (p.faultFlags != 0)
+          (
+            'Falhas ativas',
+            '0x${p.faultFlags.toRadixString(16)}',
+            'Bitmask de todas as falhas simultâneas; FAULT_CODE indica a '
+                'principal.',
+          ),
+      ];
+
+  String? _eventCodeExplain(v2p.SafrEventCode c) => switch (c) {
+        v2p.SafrEventCode.smokeAlarm => 'Fumaça acima do limiar de alarme.',
+        v2p.SafrEventCode.heatAlarm => 'Temperatura de alarme.',
+        v2p.SafrEventCode.smokeRising => 'Fumaça subindo — pré-alarme.',
+        v2p.SafrEventCode.manualTest =>
+          'Teste manual (botão) — distinto de alarme real (NFPA 72).',
+        v2p.SafrEventCode.tamper => 'Dispositivo removido da base.',
+        v2p.SafrEventCode.battLow =>
+          'Bateria baixa com ≥7 dias de autonomia restante (NFPA 72).',
+        v2p.SafrEventCode.battCritical => 'Bateria crítica — desligamento '
+            'iminente.',
+        v2p.SafrEventCode.sensorFault => 'Falha no sensor.',
+        v2p.SafrEventCode.commFault =>
+          'Dispositivo filho inalcançável (reportado pelo pai/root).',
+        v2p.SafrEventCode.acLost => 'Rede elétrica perdida — na bateria.',
+        v2p.SafrEventCode.restore =>
+          'Condição normalizada (FAULT_CODE indica qual). NÃO limpa alarme '
+              'retido — só o rearme do operador limpa.',
+        v2p.SafrEventCode.rfInterference =>
+          'Interferência/degradação no enlace de rádio (EN 54-25).',
+        _ => null,
+      };
+
+  List<_Fact> _payloadFacts(v2.SafrWireFrame f) {
+    switch (f.payload) {
+      case v2p.SafrEventPayload p:
+        return _eventFacts(p);
+      case v2p.SafrHeartbeatPayload p:
+        return [
+          ('Horário (disp.)', safrFmtTs(p.timestamp), null),
+          (
+            'Uptime',
+            '${p.uptimeS}s',
+            'Tempo desde o último boot — quedas frequentes indicam '
+                'instabilidade.',
+          ),
+          if (p.batteryPct != null) ('Bateria', '${p.batteryPct}%', null),
+          if (p.tempTenths != null)
+            ('Temperatura', '${(p.tempTenths! / 10).toStringAsFixed(1)} °C',
+                null),
+          (
+            'RSSI → pai',
+            p.rssiToParent == null ? '— (root)' : '${p.rssiToParent} dBm',
+            'Qualidade do enlace de rádio com o pai. Degradação sustentada '
+                'gera TROUBLE de interferência.',
+          ),
+          ('Pai', _endpointLabel(p.parentMac), null),
+          ('Camada', '${p.layer}', 'Profundidade na mesh (root = 0).'),
+        ];
+      case v2p.SafrTopologyPayload p:
+        return [
+          ('Papel', p.role.name, 'root = ponte serial · node = repetidor · '
+              'leaf = sensor a bateria.'),
+          ('Camada', '${p.layer}', null),
+          ('Pai', _endpointLabel(p.parentMac), null),
+          ('RSSI → pai',
+              p.rssiToParent == null ? '—' : '${p.rssiToParent} dBm', null),
+          ('Filhos', '${p.children.length}', null),
+          for (final c in p.children) ('  ${c.mac}', '${c.rssi} dBm', null),
+        ];
+      case v2p.SafrAckPayload p:
+        return [
+          (
+            'Confirma MSG',
+            '#${p.ackedMsgId}',
+            'O remetente daquele MSG_ID para de retransmitir ao receber '
+                'este ACK.',
+          ),
+          (
+            'Status',
+            p.status.name,
+            'ok = processado · error = recebido mas rejeitado · '
+                'unknownDst = destino inexistente.',
+          ),
+        ];
+      case v2p.SafrCommandPayload p:
+        final cmd = v2p.SafrCommand.values
+            .where((c) => c.wire == p.cmdRaw)
+            .firstOrNull;
+        return [
+          (
+            'Comando',
+            cmd?.name ?? '0x${p.cmdRaw.toRadixString(16)}',
+            switch (cmd) {
+              v2p.SafrCommand.linkCheck =>
+                'Verificação do enlace de descida a cada 30 s — o root só '
+                    'confirma (UL 864/EN 54-25: supervisão nos dois '
+                    'sentidos).',
+              v2p.SafrCommand.silence =>
+                'Silencia sirenes. NÃO limpa o alarme retido — silenciar e '
+                    'rearmar são ações distintas (UL 864).',
+              v2p.SafrCommand.test => 'Auto-teste — gera ALERT de teste, '
+                  'distinto de alarme real.',
+              v2p.SafrCommand.relaySet => 'Aciona/desliga o relé (GPIO12).',
+              v2p.SafrCommand.identify =>
+                'Pisca o LED para localizar o dispositivo fisicamente.',
+              v2p.SafrCommand.reset =>
+                'REARME do operador: única ação que limpa alarmes retidos '
+                    '(UL 864/NFPA 72). A central só limpa após o ACK do '
+                    'root.',
+              _ => null,
+            },
+          ),
+          ('Args', p.args.isEmpty ? '—' : p.args.join(', '), null),
+        ];
+      case v2p.SafrTimeSyncPayload p:
+        return [
+          ('Epoch', '${p.epoch}', 'Unix UTC — o root redistribui à mesh.'),
+          ('Fuso (¼h)', '${p.tzOffsetQuarterHours}',
+              'Apenas dica de exibição.'),
+        ];
+      case v2p.SafrEventLogReqPayload p:
+        return [
+          (
+            'Desde JRN_SEQ',
+            '#${p.sinceJrnSeq}',
+            'Última posição do diário que a central já possui; o root '
+                'reenvia tudo o que veio depois.',
+          ),
+          ('Máx. por lote', p.maxCount == 0 ? 'padrão (32)' : '${p.maxCount}',
+              'Controle de fluxo — o reenvio nunca atropela alarmes vivos.'),
+        ];
+      case v2p.SafrEventLogDataPayload p:
+        return [
+          (
+            'JRN_SEQ',
+            '#${p.jrnSeq}',
+            'Posição no diário do root. A central persiste o maior valor '
+                'visto e pede a partir dele na próxima reconexão.',
+          ),
+          (
+            'Lote',
+            [
+              if (p.isLast) 'último do lote',
+              if (p.isEmpty) 'diário vazio',
+              if (!p.isLast && !p.isEmpty) 'há mais entradas',
+            ].join(' · '),
+            null,
+          ),
+          if (!p.isEmpty) ('Origem', p.origSrcMac, 'Dispositivo que gerou o '
+              'evento original — o quadro em si vem do root.'),
+          if (p.event != null) ..._eventFacts(p.event!),
+        ];
+      default:
+        return const [('Payload', 'não decodificado', null)];
+    }
+  }
+}
+
+/// Answers, in order, the three questions a fire-panel operator/technician
+/// asks about any frame: chegou íntegro? é autêntico? é do meu sistema?
+class _ValidationCard extends StatelessWidget {
+  const _ValidationCard({required this.frame});
+
+  final v2.SafrWireFrame frame;
+
+  @override
+  Widget build(BuildContext context) {
+    final crcOk = frame.error != v2.SafrWireError.crcFailed &&
+        frame.error != v2.SafrWireError.truncated;
+    final bool? authOk = !frame.isEncrypted
+        ? null
+        : frame.error == v2.SafrWireError.authFailed
+            ? false
+            : frame.error == null || frame.error == v2.SafrWireError.payloadParseError
+                ? true
+                : null;
+    final bool? siteOk = frame.systemId == null
+        ? null
+        : frame.error == v2.SafrWireError.foreignSystem
+            ? false
+            : true;
+
+    Widget check(String label, bool? ok, String explain) {
+      final (icon, color) = ok == null
+          ? (Icons.remove_rounded, context.textSecondary.withValues(alpha: 0.5))
+          : ok
+              ? (Icons.check_circle_rounded, AppColors.success)
+              : (Icons.cancel_rounded, AppColors.error);
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 15, color: color),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 110,
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: ok == false ? AppColors.error : context.textPrimary,
+                ),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                explain,
+                style: TextStyle(
+                  fontSize: 11,
+                  height: 1.35,
+                  color: context.textSecondary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+            color: context.borderColor.withValues(alpha: 0.7), width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'VALIDAÇÃO',
+            style: TextStyle(
+              color: context.textSecondary,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.1,
+            ),
+          ),
+          const SizedBox(height: 8),
+          check(
+            'Integridade',
+            crcOk,
+            'CRC-16 sobre o quadro inteiro: os bytes chegaram exatamente '
+                'como foram enviados.',
+          ),
+          check(
+            'Autenticidade',
+            authOk,
+            authOk == null
+                ? 'Quadro sem criptografia — rejeitado em produção.'
+                : 'AES-128-CCM: só um dispositivo com a chave (PSK) desta '
+                    'instalação gera este quadro; replay é detectado pelos '
+                    'contadores.',
+          ),
+          check(
+            'Instalação',
+            siteOk,
+            frame.systemId == null
+                ? 'Quadro v2 — anterior ao SYSTEM_ID.'
+                : siteOk == false
+                    ? 'SYSTEM_ID de OUTRA instalação — ignorado por projeto '
+                        '(EN 54-25).'
+                    : 'SYSTEM_ID confere com esta instalação.',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FactsCard extends StatelessWidget {
+  const _FactsCard({required this.title, required this.facts});
+
+  final String title;
+  final List<_Fact> facts;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+            color: context.borderColor.withValues(alpha: 0.7), width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              color: context.textSecondary,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.1,
+            ),
+          ),
+          const SizedBox(height: 10),
+          for (final (label, value, explain) in facts)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 7),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 130,
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            color: context.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          value,
+                          style: TextStyle(
+                            color: context.textPrimary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (explain != null && explain.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 130, top: 2),
+                      child: Text(
+                        explain,
+                        style: TextStyle(
+                          color: context.textSecondary.withValues(alpha: 0.75),
+                          fontSize: 10.5,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WireErrorCard extends StatelessWidget {
+  const _WireErrorCard({required this.error});
+
+  final v2.SafrWireError error;
+
+  @override
+  Widget build(BuildContext context) {
+    final (title, explanation) = switch (error) {
+      v2.SafrWireError.authFailed => (
+          'Falha de autenticação',
+          'O quadro chegou íntegro (CRC OK), mas a verificação criptográfica '
+              'falhou. Causa mais provável: a chave (PSK) do firmware não é a '
+              'mesma do aplicativo.',
+        ),
+      v2.SafrWireError.crcFailed => (
+          'Quadro corrompido',
+          'Os bytes foram alterados na transmissão (CRC não confere). '
+              'Verifique cabo, baud rate e interferência na linha serial.',
+        ),
+      v2.SafrWireError.foreignSystem => (
+          'Quadro de outra instalação',
+          'O SYSTEM_ID não corresponde a este sistema. Instalações vizinhas '
+              'não interoperam por projeto (EN 54-25) — o quadro foi '
+              'registrado e ignorado.',
+        ),
+      v2.SafrWireError.badVersion => (
+          'Versão não suportada',
+          'O byte de versão não corresponde a um protocolo SAFR conhecido.',
+        ),
+      _ => (
+          'Falha ao decodificar',
+          'O cabeçalho é válido mas o payload não segue o layout esperado '
+              'para este tipo de mensagem (veja docs/protocol-safr-v3.md).',
+        ),
+    };
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.error.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border:
+            Border.all(color: AppColors.error.withValues(alpha: 0.4), width: 0.7),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.error_outline_rounded,
+                  color: AppColors.error, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: AppColors.error,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            explanation,
+            style: TextStyle(
+              color: context.textSecondary,
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

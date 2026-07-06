@@ -36,12 +36,71 @@ class AuditEvents extends Table {
   TextColumn get detail  => text()(); // JSON
 }
 
-@DriftDatabase(tables: [SerialPackets, DeviceMetadata, AuditEvents])
+/// Registry of mesh devices, keyed by MAC — the trusted state built from
+/// authenticated SAFR frames only (docs/protocol-safr-v2.md).
+class MeshDevices extends Table {
+  TextColumn get mac        => text()();
+  IntColumn get role        => integer().withDefault(const Constant(255))();
+  IntColumn get layer       => integer().withDefault(const Constant(0))();
+  TextColumn get parentMac  => text().nullable()();
+  IntColumn get lastRssi    => integer().nullable()(); // dBm
+  IntColumn get batteryPct  => integer().nullable()();
+  DateTimeColumn get firstSeenAt => dateTime()();
+  DateTimeColumn get lastSeenAt  => dateTime()();
+  DateTimeColumn get lastHeartbeatAt => dateTime().nullable()();
+  // Replay detection: last accepted nonce counters (spec §4).
+  IntColumn get lastBootCtr => integer().withDefault(const Constant(0))();
+  IntColumn get lastMsgCtr  => integer().withDefault(const Constant(0))();
+  // 0 = online, 1 = offline ("device missing" already raised) — persisted so
+  // the trouble isn't re-raised on every app restart.
+  IntColumn get supervisionState => integer().withDefault(const Constant(0))();
+  TextColumn get name       => text().nullable()(); // future friendly names
+  // Highest accepted event DEV_SEQ (SAFR v3 §6) — dedupes 60 s alarm
+  // re-announcements and journal replays. 0 = none seen (v2 events).
+  IntColumn get lastDevSeq  => integer().withDefault(const Constant(0))();
+  // Alarm latch (SAFR v3 §7.1.4 — UL 864/NFPA 72): set on accepted ALARM,
+  // cleared ONLY by operator RESET. Survives restarts by design.
+  IntColumn get alarmLatched => integer().withDefault(const Constant(0))();
+  DateTimeColumn get alarmLatchedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {mac};
+}
+
+/// Humanized event feed: decoded device events, supervision troubles and
+/// link diagnostics. severity: 0 ok · 1 trouble · 2 alert · 3 alarm.
+class DeviceEvents extends Table {
+  IntColumn get id          => integer().autoIncrement()();
+  DateTimeColumn get receivedAt => dateTime()();
+  TextColumn get deviceMac  => text()();
+  IntColumn get msgType     => integer()(); // SAFR MSG_TYPE; 0 = synthetic
+  IntColumn get eventType   => integer().nullable()(); // SAFR EVENT_TYPE wire
+  IntColumn get eventCode   => integer().nullable()(); // SAFR EVENT_CODE wire
+  IntColumn get severity    => integer()();
+  TextColumn get detailJson => text()();
+  IntColumn get packetId    => integer().nullable()(); // SerialPackets.id
+  TextColumn get errorKind  => text().nullable()(); // crc_failed|auth_failed|parse_error|replay
+  DateTimeColumn get ackedAt => dateTime().nullable()(); // central's ACK time
+  // SAFR v3 event identity (spec §6) — (deviceMac, devSeq) dedupes 60 s alarm
+  // re-announcements and journal replays exactly, including gap backfill.
+  IntColumn get devSeq      => integer().nullable()();
+}
+
+@DriftDatabase(tables: [
+  SerialPackets,
+  DeviceMetadata,
+  AuditEvents,
+  MeshDevices,
+  DeviceEvents,
+])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(driftDatabase(name: 'sempreiot'));
 
+  /// For unit tests: pass NativeDatabase.memory().
+  AppDatabase.forTesting(super.e);
+
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -50,6 +109,7 @@ class AppDatabase extends _$AppDatabase {
       await customStatement(
         'CREATE INDEX idx_received_at ON serial_packets(received_at DESC)',
       );
+      await _createDeviceEventIndexes();
       await seedDefaultMetadata();
     },
     onUpgrade: (m, from, to) async {
@@ -63,13 +123,44 @@ class AppDatabase extends _$AppDatabase {
       if (from < 4) {
         await m.createTable(auditEvents);
       }
+      if (from < 5) {
+        await m.createTable(meshDevices);
+        await m.createTable(deviceEvents);
+        await _createDeviceEventIndexes();
+      }
+      if (from < 6) {
+        // SAFR v3: event identity + alarm latching (docs/protocol-safr-v3.md).
+        await m.addColumn(meshDevices, meshDevices.lastDevSeq);
+        await m.addColumn(meshDevices, meshDevices.alarmLatched);
+        await m.addColumn(meshDevices, meshDevices.alarmLatchedAt);
+        await m.addColumn(deviceEvents, deviceEvents.devSeq);
+      }
     },
   );
 
-  Future<void> deleteOlderThan(DateTime cutoff) =>
-      (delete(serialPackets)
-            ..where((t) => t.receivedAt.isSmallerThanValue(cutoff)))
-          .go();
+  Future<void> _createDeviceEventIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_dev_events_received '
+      'ON device_events(received_at DESC)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_dev_events_mac '
+      'ON device_events(device_mac)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_dev_events_severity '
+      'ON device_events(severity)',
+    );
+  }
+
+  Future<void> deleteOlderThan(DateTime cutoff) async {
+    await (delete(serialPackets)
+          ..where((t) => t.receivedAt.isSmallerThanValue(cutoff)))
+        .go();
+    await (delete(deviceEvents)
+          ..where((t) => t.receivedAt.isSmallerThanValue(cutoff)))
+        .go();
+  }
 
   Future<void> deleteAllPackets() => delete(serialPackets).go();
 
@@ -125,6 +216,19 @@ class AppDatabase extends _$AppDatabase {
             ..orderBy([(t) => OrderingTerm.desc(t.at)])
             ..limit(limit))
           .get();
+
+  /// Clears the alarm latch (SAFR v3 §7.1.4) — call ONLY after the root ACKed
+  /// an operator RESET command. Empty mac / broadcast clears every latch.
+  Future<void> clearAlarmLatch({String? mac}) async {
+    final query = update(meshDevices);
+    if (mac != null && mac != 'FF:FF:FF:FF:FF:FF') {
+      query.where((t) => t.mac.equals(mac));
+    }
+    await query.write(const MeshDevicesCompanion(
+      alarmLatched: Value(0),
+      alarmLatchedAt: Value(null),
+    ));
+  }
 }
 
 final appDatabaseProvider = Provider<AppDatabase>((ref) {

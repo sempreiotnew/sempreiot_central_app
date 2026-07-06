@@ -14,6 +14,7 @@ import '../../../../features/central/application/central_auth_provider.dart';
 import '../../../../features/central/application/device_info_provider.dart';
 import '../../../../features/central/presentation/screens/device_access_screen.dart';
 import '../../../../features/central/presentation/screens/device_info_screen.dart';
+import '../../../../features/central/presentation/screens/serial_logs_screen.dart';
 import '../../../../features/provisioning/presentation/screens/provisioning_wizard_screen.dart';
 import '../../../../features/storage/presentation/screens/storage_screen.dart';
 import '../main_tab.dart';
@@ -85,10 +86,7 @@ class MainDrawer extends ConsumerWidget {
                 children: [
                   const _SectionLabel('NAVEGAÇÃO'),
                   const SizedBox(height: 4),
-                  ...(restricted
-                          ? MainTab.centralDetailTabs
-                          : MainTab.tabs.where((t) =>
-                              t != MainTab.logs && t != MainTab.social))
+                  ...(restricted ? MainTab.centralDetailTabs : MainTab.tabs)
                       .map(
                         (tab) => _NavItem(
                           tab: tab,
@@ -159,6 +157,25 @@ class MainDrawer extends ConsumerWidget {
                           ),
                         );
                       }),
+                      // Technical/debug view of the raw SAFR packet stream;
+                      // the everyday view is the Eventos tab.
+                      _DrawerItem(
+                        icon: Icons.receipt_long_rounded,
+                        label: 'Logs seriais',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
+                            PageRouteBuilder(
+                              pageBuilder: (_, __, ___) =>
+                                  const SerialLogsScreen(),
+                              transitionsBuilder: (_, anim, __, child) =>
+                                  FadeTransition(opacity: anim, child: child),
+                              transitionDuration:
+                                  const Duration(milliseconds: 300),
+                            ),
+                          );
+                        },
+                      ),
                     ] else if (!kIsWeb)
                       // SoftAP provisioning can't work from a browser: https
                       // pages can't call http://192.168.4.1 (mixed content)

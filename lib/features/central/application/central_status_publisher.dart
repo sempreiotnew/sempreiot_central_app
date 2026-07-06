@@ -8,17 +8,20 @@ import '../../../core/connectivity/network_status_provider.dart';
 import '../../../core/utils/mqtt_log.dart';
 import '../../iot/application/presence_provider.dart';
 import 'central_iot_provider.dart';
-import 'serial_provider.dart';
+import 'serial_link_provider.dart';
+import 'supervision_provider.dart';
 
 /// What the retained presence payload should currently say. Timestamp-free
 /// so it only changes (and only triggers a publish) when the reported
-/// state really changes.
+/// state really changes. USB is the protocol-driven link state (valid SAFR
+/// traffic), mesh follows the root node's supervision freshness.
 final _statusSnapshotProvider =
-    Provider<({bool ready, String wifi, String usb})>((ref) {
+    Provider<({bool ready, String wifi, String usb, String mesh})>((ref) {
   return (
     ready: ref.watch(centralIotConnectionProvider).valueOrNull ?? false,
     wifi: ref.watch(networkStatusProvider).name,
-    usb: ref.watch(serialProvider).name,
+    usb: ref.watch(serialLinkProvider).name,
+    mesh: ref.watch(meshLinkStateProvider),
   );
 });
 
@@ -54,9 +57,7 @@ final centralStatusPublisherProvider = Provider<void>((ref) {
       'status': 'online',
       'wifi': snap.wifi,
       'usb': snap.usb,
-      // Placeholder until the mesh network exists — wire to a real provider
-      // (and add it to the snapshot) when devices come online.
-      'mesh': 'disconnected',
+      'mesh': snap.mesh,
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     });
     try {

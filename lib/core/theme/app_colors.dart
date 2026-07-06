@@ -23,4 +23,8 @@ class AppColors {
   static const Color success = Color(0xFF52B788);
   static const Color warning = Color(0xFFF59E0B);
   static const Color error = Color(0xFFEF4444);
+
+  /// Fire-alarm severity scale (SAFR): TROUBLE sits between OK (success)
+  /// and ALERT (warning) — a distinct orange so faults never read as alarms.
+  static const Color trouble = Color(0xFFE8763A);
 }

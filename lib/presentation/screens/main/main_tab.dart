@@ -7,12 +7,12 @@ enum MainTab {
   central,
   centrais,
   devices,
-  social,
-  logs;
+  eventos,
+  rede;
 
   static List<MainTab> get tabs => AppConfig.isCentral
-      ? [principal, central, devices, logs, social]
-      : [principal, centrais, social];
+      ? [principal, central, devices, rede, eventos]
+      : [principal, centrais];
 
   /// USER mode drilling into a specific central: the reduced set of tabs
   /// a viewer can navigate inside that central.
@@ -23,8 +23,8 @@ enum MainTab {
         MainTab.central => 'Central',
         MainTab.centrais => 'Centrais',
         MainTab.devices => 'Dispositivos',
-        MainTab.social => 'Social',
-        MainTab.logs => 'Logs',
+        MainTab.eventos => 'Eventos',
+        MainTab.rede => 'Rede',
       };
 
   IconData get icon => switch (this) {
@@ -32,7 +32,7 @@ enum MainTab {
         MainTab.central => Icons.sensors_rounded,
         MainTab.centrais => Icons.hub_rounded,
         MainTab.devices => Icons.devices_rounded,
-        MainTab.social => Icons.group_rounded,
-        MainTab.logs => Icons.receipt_long_rounded,
+        MainTab.eventos => Icons.notifications_active_rounded,
+        MainTab.rede => Icons.hub_rounded,
       };
 }

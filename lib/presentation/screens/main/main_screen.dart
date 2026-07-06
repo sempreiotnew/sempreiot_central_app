@@ -15,7 +15,8 @@ import '../../../features/centrais/presentation/screens/centrais_list_screen.dar
 import '../../../core/connectivity/network_status_provider.dart';
 import '../../widgets/iot_network_animation.dart';
 import '../auth/login_screen.dart';
-import '../../../features/central/presentation/screens/serial_logs_screen.dart';
+import '../../../features/central/presentation/screens/events_screen.dart';
+import '../../../features/central/presentation/screens/topology_screen.dart';
 import 'main_tab.dart';
 import 'status_panel_style_provider.dart';
 import 'widgets/comm_status_gadget.dart';
@@ -247,12 +248,8 @@ class _TabBody extends StatelessWidget {
               title: 'Dispositivos',
               subtitle: 'Nenhum dispositivo conectado ainda.',
             ),
-          MainTab.social => const _PlaceholderTab(
-              icon: Icons.group_rounded,
-              title: 'Social',
-              subtitle: 'Equipes e contatos.',
-            ),
-          MainTab.logs => const SerialLogsScreen(),
+          MainTab.eventos => const EventsScreen(),
+          MainTab.rede => const TopologyScreen(embedded: true),
         },
       ),
     );

@@ -49,7 +49,9 @@
       "Bash(aws acm list-certificates *)",
       "Bash(aws acm describe-certificate *)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -m 10 \"https://czbtuf62d0.execute-api.us-east-1.amazonaws.com/lookup?email=x@x.com\")",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -m 10 \"https://api.sempreiot.com/lookup?email=x@x.com\")"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -m 10 \"https://api.sempreiot.com/lookup?email=x@x.com\")",
+      "Bash(flutter build *)",
+      "Bash(awk -F: '{print $1}')"
     ]
   }
 }

@@ -13,7 +13,8 @@ import 'core/database/app_database.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
 import 'features/app/application/app_init_provider.dart';
-import 'features/central/application/serial_ingest_provider.dart';
+import 'features/central/application/safr_ingest_provider.dart';
+import 'features/central/application/supervision_provider.dart';
 import 'features/central/data/services/factory_init_service.dart';
 import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/main/main_screen.dart';
@@ -89,7 +90,10 @@ final centralInitProvider = FutureProvider<void>((ref) async {
     await FactoryInitService.applyFactory(db, AppConfig.factoryJson);
   }
 
-  ref.read(serialIngestProvider);
+  // SAFR pipeline: ingest (parse + persist + ACK), supervision watchdog
+  // and downlink (TIME_SYNC on link-up).
+  ref.read(safrIngestProvider);
+  ref.read(supervisionProvider);
 
   await db.deleteOlderThan(
     DateTime.now().toUtc().subtract(const Duration(days: 30)),
