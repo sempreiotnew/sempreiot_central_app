@@ -6,6 +6,13 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Necessário para escanear o QR Code da central de alarme.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Necessário para configurar dispositivos conectados à rede Wi-Fi de configuração (192.168.4.1).</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

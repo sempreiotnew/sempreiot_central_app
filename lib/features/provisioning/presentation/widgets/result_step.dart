@@ -1,0 +1,128 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/theme_ext.dart';
+import '../../application/provisioning_wizard_provider.dart';
+import '../../domain/entities/provisioning_step.dart';
+import 'wizard_buttons.dart';
+
+/// Final step — one of the four provisioning outcomes.
+///
+/// The outcome is passed in (not watched) so the widget keeps its variant
+/// while animating out after restart() resets the wizard to the scan step.
+class ResultStep extends ConsumerWidget {
+  const ResultStep({super.key, required this.step});
+
+  final ProvisioningStep step;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final notifier = ref.read(provisioningWizardProvider.notifier);
+    final visual = _VisualFor(step);
+
+    return Center(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: visual.color.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(visual.icon, size: 46, color: visual.color),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              visual.title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: context.textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                visual.message,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: context.textSecondary, fontSize: 13),
+              ),
+            ),
+            const SizedBox(height: 36),
+            if (step == ProvisioningStep.resultFailed) ...[
+              WizardPrimaryButton(
+                label: 'Tentar novamente',
+                icon: Icons.refresh_rounded,
+                onTap: notifier.retryProvision,
+              ),
+              const SizedBox(height: 12),
+            ],
+            WizardSecondaryButton(
+              label: 'Configurar outro dispositivo',
+              icon: Icons.add_rounded,
+              onTap: notifier.restart,
+            ),
+            const SizedBox(height: 12),
+            WizardPrimaryButton(
+              label: 'Concluir',
+              onTap: () => Navigator.of(context).pop(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _VisualFor {
+  factory _VisualFor(ProvisioningStep step) => switch (step) {
+        ProvisioningStep.resultSuccess => const _VisualFor._(
+            icon: Icons.check_circle_rounded,
+            color: AppColors.success,
+            title: 'Dispositivo conectado!',
+            message: 'O dispositivo entrou na rede mesh da central '
+                'e já está operando.',
+          ),
+        ProvisioningStep.resultStored => const _VisualFor._(
+            icon: Icons.save_rounded,
+            color: AppColors.secondary,
+            title: 'Configuração salva',
+            message: 'O dispositivo guardou a configuração e se conectará '
+                'automaticamente quando a rede da central estiver ativa.',
+          ),
+        ProvisioningStep.resultAssumed => const _VisualFor._(
+            icon: Icons.wifi_find_rounded,
+            color: AppColors.warning,
+            title: 'Configuração enviada',
+            message: 'O dispositivo recebeu a configuração e saiu da rede de '
+                'configuração — isso normalmente significa que ele entrou na '
+                'rede mesh. Verifique na sua central se ele apareceu.',
+          ),
+        _ => const _VisualFor._(
+            icon: Icons.error_rounded,
+            color: AppColors.error,
+            title: 'Falha na conexão',
+            message: 'O dispositivo não conseguiu entrar na rede mesh. '
+                'Verifique se a central está ligada e ao alcance, '
+                'ou salve a configuração para uso futuro.',
+          ),
+      };
+
+  const _VisualFor._({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.message,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String message;
+}

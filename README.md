@@ -280,3 +280,6 @@ flutter run -d 98cc396d \
   flutter run -d 98cc396d \
   --dart-define=APP_MODE=central \
   --dart-define='FACTORY={"info":{"name":"Central Nome","firmware_version":"1.0.0","subId":"84b824d8-6041-701c-70a1-ba40bb4f0ab4","old_subId":"","created_at":"2026-06-25","updated_at":"2026-06-25"},"credentials":{"pin":"428412","unlock_pin":"123456","root":"admin","password":"Teste@123","level_pins":{"LEVEL_1":"111111","LEVEL_2":"222222","LEVEL_3":"333333","LEVEL_4":"444444"}},"iot":{"iot_client_id":"central-003@sempreiot.com","iot_password":"$y3XYZv8H)Dw@O+(7+Sy"}}'
+
+
+  flutter run -d 00008140-00047D183A53801C --dart-define=APP_MODE=app --dart-define=DEVICE_AP_URL=http://10.0.0.130:8080

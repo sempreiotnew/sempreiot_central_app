@@ -4,7 +4,12 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../../core/theme/app_colors.dart';
 
 class QrScannerScreen extends StatefulWidget {
-  const QrScannerScreen({super.key});
+  const QrScannerScreen({
+    super.key,
+    this.hint = 'Aponte para o QR Code da central',
+  });
+
+  final String hint;
 
   @override
   State<QrScannerScreen> createState() => _QrScannerScreenState();
@@ -79,14 +84,14 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
           ),
 
           // ── Hint text ─────────────────────────────────────────────────────
-          const Positioned(
+          Positioned(
             bottom: 72,
             left: 0,
             right: 0,
             child: Text(
-              'Aponte para o QR Code da central',
+              widget.hint,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,

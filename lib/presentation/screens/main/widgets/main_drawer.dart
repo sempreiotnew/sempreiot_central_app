@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -13,6 +14,7 @@ import '../../../../features/central/application/central_auth_provider.dart';
 import '../../../../features/central/application/device_info_provider.dart';
 import '../../../../features/central/presentation/screens/device_access_screen.dart';
 import '../../../../features/central/presentation/screens/device_info_screen.dart';
+import '../../../../features/provisioning/presentation/screens/provisioning_wizard_screen.dart';
 import '../../../../features/storage/presentation/screens/storage_screen.dart';
 import '../main_tab.dart';
 
@@ -157,7 +159,23 @@ class MainDrawer extends ConsumerWidget {
                           ),
                         );
                       }),
-                    ],
+                    ] else if (!kIsWeb)
+                      // SoftAP provisioning can't work from a browser: https
+                      // pages can't call http://192.168.4.1 (mixed content)
+                      // and the laptop loses internet on the device's AP.
+                      _DrawerItem(
+                        icon: Icons.settings_input_antenna_rounded,
+                        label: 'Configurar Dispositivo',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  const ProvisioningWizardScreen(),
+                            ),
+                          );
+                        },
+                      ),
                     const _ThemeToggleItem(),
                     const _DrawerItem(
                       icon: Icons.info_outline_rounded,
