@@ -124,12 +124,17 @@ class AppDatabase extends _$AppDatabase {
         await m.createTable(auditEvents);
       }
       if (from < 5) {
+        // createTable() always reflects the CURRENT table definition, which
+        // already includes the v6 columns below — so an upgrade landing
+        // here must NOT also run the v6 addColumn step (that would try to
+        // add columns that already exist and throw "duplicate column name").
         await m.createTable(meshDevices);
         await m.createTable(deviceEvents);
         await _createDeviceEventIndexes();
-      }
-      if (from < 6) {
+      } else if (from < 6) {
         // SAFR v3: event identity + alarm latching (docs/protocol-safr-v3.md).
+        // Only reached by databases that were already at exactly v5, where
+        // mesh_devices/device_events exist but predate these columns.
         await m.addColumn(meshDevices, meshDevices.lastDevSeq);
         await m.addColumn(meshDevices, meshDevices.alarmLatched);
         await m.addColumn(meshDevices, meshDevices.alarmLatchedAt);
